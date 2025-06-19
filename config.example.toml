@@ -1,0 +1,57 @@
+# 谁是卧底游戏后端配置文件示例
+# 请复制此文件为 config.toml 并根据实际情况修改
+
+[server]
+# 服务器监听地址，0.0.0.0 表示监听所有网络接口
+host = "127.0.0.1"
+# 服务器端口号
+port = 8080
+# 工作线程数量，建议设置为 CPU 核心数的 2-4 倍
+workers = 4
+
+[websocket]
+# WebSocket 连接路径
+path = "/ws"
+# 心跳检测间隔（秒）
+ping_interval = 30
+# 心跳超时时间（秒）
+ping_timeout = 10
+
+[game]
+# 游戏最少玩家数量
+min_players = 4
+# 游戏最多玩家数量
+max_players = 12
+# 描述阶段时间限制（秒）
+describe_time_limit = 60
+# 投票阶段时间限制（秒）
+vote_time_limit = 60
+# 回合间延迟时间（秒）
+round_delay = 5
+
+[redis]
+# Redis 连接地址，格式：redis://host:port
+url = "redis://127.0.0.1:6379"
+# Redis 连接池大小
+pool_size = 10
+
+[security]
+# 速率限制：每分钟最大请求数
+rate_limit_requests = 100
+# 速率限制时间窗口（秒）
+rate_limit_duration = 60
+
+[auth]
+# 认证域名，用于 CORS 和 cookie 设置
+# 请替换为您的实际域名
+domain = "https://your-domain.com"
+
+[word_bank]
+# 词库文件路径
+file_path = "data/words.json"
+# 词语相似度阈值（0.0-1.0），用于生成卧底词
+min_similarity = 0.5
+# 每个分类最大词语数量
+max_words_per_category = 10
+# 是否启用词语分类功能
+enable_categories = true 

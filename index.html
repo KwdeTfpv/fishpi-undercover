@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>测试</title>
+</head>
+<body>
+    <div id="login">
+        <h2>测试1</h2>
+        <div id="loginStatus">
+            <p>请先登录摸鱼派账号</p>
+            <button onclick="loginWithFishpi()">登录派</button>
+        </div>
+        <div id="userInfo" style="display: none;">
+            <p>欢迎，<span id="userNickname"></span>！</p>
+            <input type="text" id="roomId" placeholder="房间ID（可选）">
+            <button onclick="joinGame()">加入游戏</button>
+            <button onclick="logout()">退出登录</button>
+        </div>
+        <div id="roomList" style="margin-top: 20px;"></div>
+    </div>
+
+    <div id="gameRoom" style="display: none;">
+        <h2>房间</h2>
+        <div id="roomInfo"></div>
+        <div id="players"></div>
+        <div id="gameStatus"></div>
+        <div id="gameContent"></div>
+        <div id="descriptions"></div>
+        <div id="voteSection" style="display: none;">
+            <h3>投票</h3>
+            <div id="voteOptions"></div>
+        </div>
+        <button onclick="leaveGame()">离开</button>
+    </div>
+
+    <script>
+        let ws = null;
+        let playerId = null;
+        let currentState = null;
+        let gameData = null;
+        let countdownTimer = null;
+        let countdownStartTime = null;
+        let userSessionId = null;
+        let userInfo = null;
+
+        // 页面加载时检查登录状态
+        window.onload = function() {
+            // 检查URL参数中是否有session_id（登录回调）
+            const urlParams = new URLSearchParams(window.location.search);
+            const sessionId = urlParams.get('session_id');
+            
+            if (sessionId) {
+                // 从URL参数获取到session_id，保存到localStorage
+                localStorage.setItem('fishpi_session_id', sessionId);
+                // 清除URL参数
+                window.history.replaceState({}, document.title, window.location.pathname);
+                // 验证会话
+                validateSession(sessionId);
+            } else {
+                // 检查localStorage中的session_id
+                checkLoginStatus();
+            }
+            // 聊天输入框回车发送
+            document.addEventListener('keydown', function(e) {
+                const chatInput = document.getElementById('chatInput');
+                if (chatInput && chatInput === document.activeElement && e.key === 'Enter') {
+                    e.preventDefault();
+                    sendChat();
+                }
+            });
+        };
+
+        // 检查登录状态
+        function checkLoginStatus() {
+            const sessionId = localStorage.getItem('fishpi_session_id');
+            if (sessionId) {
+                userSessionId = sessionId;
+                // 验证会话是否有效
+                validateSession(sessionId);
+            } else {
+                showLoginPrompt();
+            }
+        }
+
+        // 显示登录提示
+        function showLoginPrompt() {
+            document.getElementById('loginStatus').style.display = 'block';
+            document.getElementById('userInfo').style.display = 'none';
+        }
+
+        // 显示用户信息
+        function showUserInfo(user) {
+            userInfo = user;
+            document.getElementById('userNickname').textContent = user.nickname;
+            document.getElementById('loginStatus').style.display = 'none';
+            document.getElementById('userInfo').style.display = 'block';
+        }
+
+        // 登录摸鱼派
+        function loginWithFishpi() {
+            // 请求我们的后端生成登录URL
+            fetch('https://your-domain.ngrok-free.app/auth/login')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.login_url) {
+                        console.log('获取到登录URL:', data.login_url);
+                        // 检查是否是ngrok警告页面
+                        if (window.location.href.includes('ngrok-free.app') && document.title.includes('ngrok')) {
+                            // 如果是ngrok警告页面，显示提示
+                            alert('检测到ngrok警告页面，请手动点击"Visit Site"按钮继续');
+                        }
+                        window.location.href = data.login_url;
+                    } else {
+                        console.error('获取登录URL失败:', data.error);
+                        alert('获取登录URL失败: ' + (data.error || '未知错误'));
+                    }
+                })
+                .catch(error => {
+                    console.error('请求登录URL失败:', error);
+                    // 检查是否是ngrok警告页面
+                    if (window.location.href.includes('ngrok-free.app') && document.title.includes('ngrok')) {
+                        alert('检测到ngrok警告页面，请手动点击"Visit Site"按钮继续');
+                    } else {
+                        alert('请求登录URL失败，请重试');
+                    }
+                });
+        }
+
+        // 验证会话
+        function validateSession(sessionId) {
+            fetch(`https://your-domain.ngrok-free.app/auth/validate?session_id=${sessionId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.user) {
+                        userSessionId = sessionId; // 设置会话ID
+                        showUserInfo(data.user);
+                    } else {
+                        localStorage.removeItem('fishpi_session_id');
+                        userSessionId = null; // 清除会话ID
+                        showLoginPrompt();
+                        if (data.message) {
+                            alert('会话验证失败: ' + data.message);
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('验证会话失败:', error);
+                    localStorage.removeItem('fishpi_session_id');
+                    userSessionId = null; // 清除会话ID
+                    showLoginPrompt();
+                    alert('验证会话失败，请重新登录');
+                });
+        }
+
+        // 退出登录
+        function logout() {
+            localStorage.removeItem('fishpi_session_id');
+            userSessionId = null;
+            userInfo = null;
+            showLoginPrompt();
+        }
+
+        function joinGame() {
+            if (!userSessionId) {
+                alert('请先登录');
+                return;
+            }
+
+            const roomId = document.getElementById('roomId').value;
+            // 修复WebSocket URL构建逻辑
+            let wsUrl = `wss://your-domain.ngrok-free.app/ws`;
+            const params = new URLSearchParams();
+            if (roomId) {
+                params.append('room_id', roomId);
+            }
+            params.append('session_id', userSessionId);
+            
+            if (params.toString()) {
+                wsUrl += `?${params.toString()}`;
+            }
+            
+            console.log('尝试连接WebSocket:', wsUrl);
+            
+            try {
+                ws = new WebSocket(wsUrl);
+
+                ws.onopen = () => {
+                    console.log('WebSocket连接已建立');
+                    // 发送join消息加入房间
+                    ws.send(JSON.stringify({
+                        type: 'join',
+                        data: {
+                            player_name: userInfo.nickname,
+                            player_id: userInfo.user_id
+                        }
+                    }));
+                };
+
+                ws.onmessage = (event) => {
+                    console.log('收到消息:', event.data);
+                    try {
+                        const message = JSON.parse(event.data);
+                        handleMessage(message);
+                    } catch (error) {
+                        console.error('解析消息失败:', error);
+                    }
+                };
+
+                ws.onclose = (event) => {
+                    console.log('WebSocket连接已关闭', event.code, event.reason);
+                    if (event.code !== 1000) { // 1000是正常关闭
+                        alert(`连接已断开 (代码: ${event.code})`);
+                    }
+                    resetGame();
+                };
+
+                ws.onerror = (error) => {
+                    console.error('WebSocket错误:', error);
+                    alert('连接发生错误，请检查网络连接或联系管理员');
+                    resetGame();
+                };
+            } catch (error) {
+                console.error('创建WebSocket连接失败:', error);
+                alert('创建连接失败: ' + error.message);
+            }
+        }
+
+        function handleMessage(message) {
+            console.log('处理消息:', message);
+            try {
+                console.log('消息类型:', message.type);
+                console.log('消息数据:', message.data);
+                
+                switch (message.type) {
+                    case 'user_info':
+                        console.log('处理用户信息消息');
+                        userInfo = message.data;
+                        playerId = message.data.user_id;
+                        console.log('设置玩家ID为:', playerId);
+                        break;
+                    case 'notification':
+                        console.log('处理通知消息');
+                        showNotification(message.data.message);
+                        break;
+                    case 'state_update':
+                        console.log('处理状态更新消息');
+                        console.log('当前玩家ID:', playerId);
+                        console.log('消息中的玩家列表:', message.data.players);
+                        // 如果是第一次收到state_update，说明成功加入房间
+                        if (!playerId && userInfo) {
+                            console.log('首次收到状态更新，设置玩家ID');
+                            document.getElementById('login').style.display = 'none';
+                            document.getElementById('gameRoom').style.display = 'block';
+                            playerId = userInfo.user_id;
+                            console.log('设置玩家ID为:', playerId);
+                        }
+                        updateGameState(message.data);
+                        break;
+                    case 'room_list':
+                        console.log('处理房间列表消息');
+                        console.log('房间列表数据:', message.data.rooms);
+                        updateRoomList(message.data.rooms);
+                        break;
+                    case 'error':
+                        console.log('处理错误消息');
+                        showError(message.data.message);
+                        break;
+                    case 'description':
+                        console.log('处理描述消息');
+                        showDescription(message.data);
+                        break;
+                    case 'vote':
+                        console.log('处理投票消息');
+                        showVote(message.data);
+                        break;
+                    case 'chat':
+                        console.log('处理聊天消息');
+                        showChatMessage(message.data);
+                        break;
+                    default:
+                        console.log('未知消息类型:', message.type);
+                }
+            } catch (error) {
+                console.error('处理消息时出错:', error);
+                console.error('错误堆栈:', error.stack);
+                showError('处理消息时出错');
+            }
+        }
+
+        function showNotification(message) {
+            console.log('显示通知:', message);
+            const gameStatus = document.getElementById('gameStatus');
+            gameStatus.innerHTML = `<p>${message}</p>`;
+        }
+
+        function updateGameState(data) {
+            console.log('开始更新游戏状态');
+            console.log('游戏数据:', data);
+            gameData = data;
+            currentState = data.state;
+            console.log('当前状态:', currentState);
+            
+            // 如果是第一次收到state_update，显示游戏界面
+            if (document.getElementById('gameRoom').style.display === 'none') {
+                console.log('首次收到状态更新，显示游戏界面');
+                document.getElementById('login').style.display = 'none';
+                document.getElementById('gameRoom').style.display = 'block';
+                if (userInfo && !playerId) {
+                    playerId = userInfo.user_id;
+                    console.log('设置玩家ID为:', playerId);
+                }
+            }
+            
+            // 更新玩家列表
+            console.log('更新玩家列表');
+            updatePlayersList(data.players);
+            
+            // 更新游戏内容
+            const gameContent = document.getElementById('gameContent');
+            const roomInfo = document.getElementById('roomInfo');
+            
+            console.log('更新房间信息');
+            roomInfo.innerHTML = `<p>当前状态：${getStateName(data.state)}</p>`;
+            
+            console.log('根据状态更新游戏内容');
+            updateGameContent(data);
+        }
+
+        function updateGameContent(data) {
+            console.log('更新游戏内容');
+            console.log('游戏数据:', data);
+            const gameContent = document.getElementById('gameContent');
+            
+            // 清除之前的倒计时
+            clearCountdown();
+            
+            switch (data.state) {
+                case 'Lobby':
+                    console.log('大厅状态');
+                    // 隐藏投票区域
+                    document.getElementById('voteSection').style.display = 'none';
+                    
+                    // 检查当前玩家是否已经准备
+                    const lobbyPlayer = data.players.find(p => p.id === playerId);
+                    const isReady = lobbyPlayer && lobbyPlayer.is_ready;
+                    
+                    if (isReady) {
+                        gameContent.innerHTML = '<button disabled>已准备</button>';
+                    } else {
+                        gameContent.innerHTML = '<button onclick="ready()">准备</button>';
+                    }
+                    
+                    // 添加聊天区域
+                    const lobbyChatDiv = document.createElement('div');
+                    lobbyChatDiv.id = 'chatSection';
+                    lobbyChatDiv.innerHTML = `
+                        <h3>聊天区域</h3>
+                        <div id="chatMessages" style="height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin: 10px 0;"></div>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="chatInput" placeholder="输入聊天内容..." style="flex: 1;">
+                            <button onclick="sendChat()">发送</button>
+                        </div>
+                    `;
+                    gameContent.appendChild(lobbyChatDiv);
+                    
+                    // 显示历史聊天消息
+                    if (data.chat_messages) {
+                        showChatMessages(data.chat_messages);
+                    }
+                    break;
+                case 'RoleAssignment':
+                    console.log('角色分配状态');
+                    // 隐藏投票区域
+                    document.getElementById('voteSection').style.display = 'none';
+                    gameContent.innerHTML = '<p>正在分配角色...</p>';
+                    break;
+                case 'DescribePhase':
+                    console.log('描述阶段');
+                    // 隐藏投票区域
+                    document.getElementById('voteSection').style.display = 'none';
+                    const currentPlayer = data.current_player;
+                    if (currentPlayer === playerId) {
+                        console.log('当前玩家回合');
+                        const player = data.players.find(p => p.id === playerId);
+                        gameContent.innerHTML = `
+                            <div id="countdown">
+                                <h3>描述时间剩余：<span id="countdown-display">60</span>秒</h3>
+                            </div>
+                            <p>你的词语是：${player.word}</p>
+                            <textarea id="description" placeholder="请输入你的描述"></textarea>
+                            <button onclick="submitDescription()">提交描述</button>
+                        `;
+                        // 开始60秒倒计时
+                        startCountdown(60, 'describe');
+                    } else {
+                        console.log('等待其他玩家');
+                        const currentPlayerName = data.players.find(p => p.id === currentPlayer)?.name || '未知玩家';
+                        gameContent.innerHTML = `
+                            <div id="countdown">
+                                <h3>等待描述时间剩余：<span id="countdown-display">60</span>秒</h3>
+                            </div>
+                            <p>等待玩家 ${currentPlayerName} 描述...</p>
+                        `;
+                        // 开始60秒倒计时
+                        startCountdown(60, 'describe');
+                    }
+                    showDescriptions(data.descriptions || []);
+                    break;
+                case 'VotePhase':
+                    console.log('投票阶段');
+                    showVoteSection(data.players);
+                    showDescriptions(data.descriptions || []);
+                    // 在投票区域添加倒计时
+                    const voteSection = document.getElementById('voteSection');
+                    const countdownDiv = document.createElement('div');
+                    countdownDiv.id = 'countdown';
+                    countdownDiv.innerHTML = '<h3>投票时间剩余：<span id="countdown-display">60</span>秒</h3>';
+                    voteSection.insertBefore(countdownDiv, voteSection.firstChild);
+                    // 开始60秒倒计时
+                    startCountdown(60, 'vote');
+                    
+                    // 添加聊天区域
+                    const voteChatDiv = document.createElement('div');
+                    voteChatDiv.id = 'chatSection';
+                    voteChatDiv.innerHTML = `
+                        <h3>聊天区域</h3>
+                        <div id="chatMessages" style="height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin: 10px 0;"></div>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="chatInput" placeholder="输入聊天内容..." style="flex: 1;">
+                            <button onclick="sendChat()">发送</button>
+                        </div>
+                    `;
+                    voteSection.appendChild(voteChatDiv);
+                    
+                    // 显示历史聊天消息
+                    if (data.chat_messages) {
+                        showChatMessages(data.chat_messages);
+                    }
+                    break;
+                case 'ResultPhase':
+                    console.log('结果阶段');
+                    console.log('结果数据:', data);
+                    
+                    // 隐藏投票区域
+                    document.getElementById('voteSection').style.display = 'none';
+                    
+                    // 检查是否是平票
+                    let resultMessage = '';
+                    if (!data.eliminated || data.eliminated === 'null' || data.eliminated === '00000000-0000-0000-0000-000000000000') {
+                        resultMessage = '投票平票，没有人被淘汰！';
+                    } else {
+                        // 找到被淘汰的玩家
+                        const eliminatedPlayer = data.players.find(p => p.id === data.eliminated);
+                        if (eliminatedPlayer) {
+                            resultMessage = `玩家 ${eliminatedPlayer.name} 被淘汰了！`;
+                        } else {
+                            resultMessage = '有玩家被淘汰了！';
+                        }
+                    }
+                    
+                    gameContent.innerHTML = `
+                        <div id="countdown">
+                            <h3>下一轮倒计时：<span id="countdown-display">5</span>秒</h3>
+                        </div>
+                        <h3>投票结果</h3>
+                        <p>${resultMessage}</p>
+                        <p>正在进入下一轮...</p>
+                    `;
+                    // 开始5秒倒计时
+                    startCountdown(5, 'result');
+                    break;
+                case 'GameOver':
+                    console.log('游戏结束');
+                    // 隐藏投票区域
+                    document.getElementById('voteSection').style.display = 'none';
+                    
+                    const winner = data.winner || '未知';
+                    const winnerText = winner === 'Civilian' ? '平民' : winner === 'Undercover' ? '卧底' : winner;
+                    
+                    gameContent.innerHTML = `
+                        <h2>游戏结束！</h2>
+                        <h3>获胜方：${winnerText}</h3>
+                        <p>所有玩家角色和词语：</p>
+                        <div id="finalResults"></div>
+                        <button onclick="ready()">再来一局</button>
+                    `;
+                    showFinalResults(data.players);
+                    break;
+            }
+        }
+
+        function updatePlayersList(players) {
+            console.log('更新玩家列表');
+            console.log('玩家数据:', players);
+            const playersDiv = document.getElementById('players');
+            playersDiv.innerHTML = '<h3>玩家列表</h3>';
+            players.forEach(player => {
+                console.log('处理玩家:', player);
+                const status = player.is_alive ? '存活' : '已淘汰';
+                const statusClass = player.is_alive ? '' : 'style="color: red;"';
+                // 只显示当前玩家的角色
+                const role = (player.id === playerId && player.role) ? `(${player.role})` : '';
+                playersDiv.innerHTML += `
+                    <p ${statusClass}>${player.name} ${role} - ${status}</p>
+                `;
+            });
+        }
+
+        function showDescriptions(descriptions) {
+            console.log('显示描述列表');
+            console.log('描述数据:', descriptions);
+            const descriptionsDiv = document.getElementById('descriptions');
+            
+            // 确保descriptions是数组
+            if (!Array.isArray(descriptions)) {
+                console.log('descriptions不是数组，尝试转换');
+                if (descriptions && typeof descriptions === 'object') {
+                    // 如果是对象，转换为数组
+                    descriptions = Object.entries(descriptions).map(([player_id, content]) => ({
+                        player_id,
+                        content
+                    }));
+                } else {
+                    descriptions = [];
+                }
+            }
+            
+            if (!descriptions || descriptions.length === 0) {
+                console.log('没有描述数据');
+                descriptionsDiv.innerHTML = '<p>暂无描述</p>';
+                return;
+            }
+            
+            descriptionsDiv.innerHTML = '<h3>描述列表</h3>';
+            descriptions.forEach(desc => {
+                const player = gameData.players.find(p => p.id === desc.player_id);
+                const playerName = player ? player.name : '未知玩家';
+                descriptionsDiv.innerHTML += `
+                    <p>${playerName}: ${desc.content}</p>
+                `;
+            });
+        }
+
+        function showVoteSection(players) {
+            // 清除之前的倒计时
+            clearCountdown();
+            
+            const voteSection = document.getElementById('voteSection');
+            const voteOptions = document.getElementById('voteOptions');
+            voteSection.style.display = 'block';
+            
+            // 只在投票阶段清除之前的聊天区域
+            if (currentState === 'VotePhase') {
+                const existingChatSection = document.getElementById('chatSection');
+                if (existingChatSection) {
+                    existingChatSection.remove();
+                }
+            }
+            
+            voteOptions.innerHTML = '';
+            const alivePlayers = players.filter(p => p.is_alive);
+            console.log('存活玩家:', alivePlayers);
+            
+            alivePlayers.forEach(player => {
+                if (player.id !== playerId) {
+                    voteOptions.innerHTML += `
+                        <button onclick="vote('${player.id}')" id="vote-${player.id}">投票给 ${player.name}</button>
+                    `;
+                }
+            });
+            
+            if (alivePlayers.length <= 1) {
+                voteOptions.innerHTML = '<p>没有可投票的玩家</p>';
+            }
+            
+            // 确保所有投票按钮都是启用状态
+            const voteButtons = document.querySelectorAll('#voteOptions button');
+            voteButtons.forEach(button => {
+                button.disabled = false;
+            });
+        }
+
+        function showFinalResults(players) {
+            const finalResults = document.getElementById('finalResults');
+            finalResults.innerHTML = ''; // 清空之前的内容
+            
+            players.forEach(player => {
+                const role = player.role || '未知';
+                const word = player.word || '未知';
+                const status = player.is_alive ? '存活' : '已淘汰';
+                const statusClass = player.is_alive ? 'style="color: green;"' : 'style="color: red;"';
+                
+                finalResults.innerHTML += `
+                    <p ${statusClass}>${player.name}: ${role} - 词语: ${word} (${status})</p>
+                `;
+            });
+        }
+
+        function getStateName(state) {
+            const stateNames = {
+                'Lobby': '等待中',
+                'RoleAssignment': '分配角色',
+                'DescribePhase': '描述阶段',
+                'VotePhase': '投票阶段',
+                'ResultPhase': '结果阶段',
+                'GameOver': '结束'
+            };
+            return stateNames[state] || state;
+        }
+
+        function ready() {
+            if (!ws || !playerId) {
+                console.error('WebSocket未连接或玩家ID未设置');
+                return;
+            }
+            console.log('发送准备消息，玩家ID:', playerId);
+            ws.send(JSON.stringify({
+                type: 'ready',
+                data: {
+                    player_id: playerId
+                }
+            }));
+        }
+
+        function submitDescription() {
+            if (!ws || !playerId) {
+                console.error('WebSocket未连接或玩家ID未设置');
+                return;
+            }
+            const content = document.getElementById('description').value.trim();
+            if (!content) {
+                alert('请输入描述内容');
+                return;
+            }
+            console.log('发送描述消息，玩家ID:', playerId, '内容:', content);
+            ws.send(JSON.stringify({
+                type: 'describe',
+                data: {
+                    player_id: playerId,
+                    content: content
+                }
+            }));
+        }
+
+        function vote(targetId) {
+            if (!ws || !playerId) {
+                console.error('WebSocket未连接或玩家ID未设置');
+                return;
+            }
+            console.log('发送投票消息，玩家ID:', playerId, '目标ID:', targetId);
+            
+            // 禁用所有投票按钮，防止重复投票
+            const voteButtons = document.querySelectorAll('#voteOptions button');
+            voteButtons.forEach(button => {
+                button.disabled = true;
+                button.textContent = '投票中...';
+            });
+            
+            ws.send(JSON.stringify({
+                type: 'vote',
+                data: {
+                    player_id: playerId,
+                    target_id: targetId
+                }
+            }));
+        }
+
+        function leaveGame() {
+            if (ws && playerId) {
+                console.log('发送离开消息，玩家ID:', playerId);
+                ws.send(JSON.stringify({
+                    type: 'leave',
+                    data: {
+                        player_id: playerId
+                    }
+                }));
+            }
+            if (ws) {
+                ws.close();
+            }
+            resetGame();
+        }
+
+        function resetGame() {
+            document.getElementById('login').style.display = 'block';
+            document.getElementById('gameRoom').style.display = 'none';
+            clearCountdown();
+            ws = null;
+            playerId = null;
+            currentState = null;
+            gameData = null;
+        }
+
+        function showError(message) {
+            alert(`错误：${message}`);
+        }
+
+        function updateRoomList(rooms) {
+            console.log('更新房间列表:', rooms);
+            const roomList = document.getElementById('roomList');
+            if (!rooms || rooms.length === 0) {
+                roomList.innerHTML = '<p>当前没有可用的房间</p>';
+                return;
+            }
+
+            let html = '<h3>可用房间列表</h3><ul>';
+            rooms.forEach(room => {
+                html += `
+                    <li>
+                        房间ID: ${room.id} - 玩家数: ${room.player_count}
+                        <button onclick="joinRoom('${room.id}')">加入此房间</button>
+                    </li>
+                `;
+            });
+            html += '</ul>';
+            roomList.innerHTML = html;
+        }
+
+        function joinRoom(roomId) {
+            document.getElementById('roomId').value = roomId;
+            joinGame();
+        }
+
+        function showDescription(data) {
+            const gameContent = document.getElementById('gameContent');
+            const player = gameData.players.find(p => p.id === data.player_id);
+            if (player) {
+                gameContent.innerHTML += `<p>${player.name} 的描述: ${data.content}</p>`;
+            }
+        }
+
+        function showVote(data) {
+            const voteSection = document.getElementById('voteSection');
+            const voteOptions = document.getElementById('voteOptions');
+            voteSection.style.display = 'block';
+            
+            // 清空现有选项
+            voteOptions.innerHTML = '';
+            
+            // 只显示存活的玩家作为投票选项
+            const alivePlayers = gameData.players.filter(p => p.is_alive);
+            console.log('存活玩家:', alivePlayers);
+            
+            alivePlayers.forEach(player => {
+                if (player.id !== playerId) {
+                    const button = document.createElement('button');
+                    button.textContent = `投票给 ${player.name}`;
+                    button.onclick = () => vote(player.id);
+                    voteOptions.appendChild(button);
+                }
+            });
+            
+            if (alivePlayers.length <= 1) {
+                voteOptions.innerHTML = '<p>没有可投票的玩家</p>';
+            }
+        }
+
+        // 开始倒计时
+        function startCountdown(duration, phase) {
+            clearCountdown();
+            countdownStartTime = Date.now();
+            const countdownDisplay = document.getElementById('countdown-display');
+            
+            if (!countdownDisplay) {
+                console.error('找不到倒计时显示元素');
+                return;
+            }
+            
+            let remaining = duration;
+            countdownDisplay.textContent = remaining;
+            
+            countdownTimer = setInterval(() => {
+                remaining--;
+                if (countdownDisplay) {
+                    countdownDisplay.textContent = remaining;
+                }
+                
+                if (remaining <= 0) {
+                    clearCountdown();
+                    console.log(`${phase}阶段倒计时结束`);
+                }
+            }, 1000);
+        }
+
+        // 清除倒计时
+        function clearCountdown() {
+            if (countdownTimer) {
+                clearInterval(countdownTimer);
+                countdownTimer = null;
+            }
+            countdownStartTime = null;
+        }
+
+        // 发送聊天消息
+        function sendChat() {
+            if (!ws || !playerId) {
+                console.error('WebSocket未连接或玩家ID未设置');
+                return;
+            }
+            const chatInput = document.getElementById('chatInput');
+            const content = chatInput.value.trim();
+            
+            if (!content) {
+                return;
+            }
+            
+            console.log('发送聊天消息，玩家ID:', playerId, '内容:', content);
+            ws.send(JSON.stringify({
+                type: 'chat',
+                data: {
+                    player_id: playerId,
+                    content: content
+                }
+            }));
+            
+            chatInput.value = '';
+        }
+
+        // 显示聊天消息
+        function showChatMessage(data) {
+            const chatMessages = document.getElementById('chatMessages');
+            if (!chatMessages) return;
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.style.marginBottom = '5px';
+            messageDiv.innerHTML = `<strong>${data.player_name}:</strong> ${data.content}`;
+            chatMessages.appendChild(messageDiv);
+            
+            // 自动滚动到底部
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // 显示聊天消息列表
+        function showChatMessages(messages) {
+            const chatMessages = document.getElementById('chatMessages');
+            if (!chatMessages) return;
+            
+            chatMessages.innerHTML = '';
+            messages.forEach(msg => {
+                const messageDiv = document.createElement('div');
+                messageDiv.style.marginBottom = '5px';
+                messageDiv.innerHTML = `<strong>${msg.player_name}:</strong> ${msg.content}`;
+                chatMessages.appendChild(messageDiv);
+            });
+            
+            // 自动滚动到底部
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+    </script>
+</body>
+</html> 

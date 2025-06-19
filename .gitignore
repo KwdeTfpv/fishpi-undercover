@@ -1,0 +1,10 @@
+/target
+.env
+*.log
+config.toml
+*.db
+*.sqlite
+*.sqlite3
+.DS_Store
+Thumbs.db
+/data
