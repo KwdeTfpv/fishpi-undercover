@@ -91,12 +91,13 @@ pub enum GameState {
 pub enum GameEvent {
     PlayerJoined(Player),
     PlayerLeft(PlayerId),
-    PlayerReady(PlayerId, bool), // bool表示是否可以开始游戏
+    PlayerReady(PlayerId, bool),
     GameStarted(Vec<Player>),
     DescriptionAdded(PlayerId, String),
     NextPlayer(PlayerId),
     DescribePhaseComplete,
     VoteAdded(PlayerId, PlayerId),
+    VoteChanged(PlayerId, PlayerId, PlayerId),
     VotePhaseComplete(HashMap<PlayerId, PlayerId>),
     PlayerEliminated(PlayerId),
     VoteTied,
@@ -395,21 +396,24 @@ impl GameState {
                     return Err("您已被淘汰，无法投票".to_string());
                 }
 
-                if votes.contains_key(&voter_id) {
-                    return Err("您已经投过票了".to_string());
-                }
-
                 if !players.iter().any(|p| p.id == target_id && p.is_alive) {
                     return Err("目标玩家已被淘汰".to_string());
                 }
 
-                votes.insert(voter_id.clone(), target_id.clone());
-
-                if votes.len() == players.iter().filter(|p| p.is_alive).count() {
-                    let votes_clone = votes.clone();
-                    self.process_votes()?;
-                    Ok(GameEvent::VotePhaseComplete(votes_clone))
+                // 检查是否已经投过票
+                if let Some(previous_target) = votes.get(&voter_id) {
+                    // 更改投票
+                    if previous_target == &target_id {
+                        return Err("您已经投给这个玩家了".to_string());
+                    }
+                    
+                    let previous_target = previous_target.clone();
+                    votes.insert(voter_id.clone(), target_id.clone());
+                    
+                    Ok(GameEvent::VoteChanged(voter_id, previous_target, target_id))
                 } else {
+                    // 首次投票
+                    votes.insert(voter_id.clone(), target_id.clone());
                     Ok(GameEvent::VoteAdded(voter_id, target_id))
                 }
             }
@@ -683,6 +687,7 @@ impl GameState {
                     return Ok(GameEvent::VotePhaseComplete(votes_clone));
                 }
 
+                // 为未投票的玩家随机分配投票
                 let mut rng = rand::rng();
                 for player_id in alive_players.clone() {
                     if !votes.contains_key(&player_id) {

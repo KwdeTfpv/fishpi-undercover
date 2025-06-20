@@ -5,7 +5,7 @@ use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitEx
 async fn main() -> Result<()> {
     // 初始化日志
     tracing_subscriber::registry()
-        .with(EnvFilter::new("fishpi_undercover=info"))
+        .with(EnvFilter::new("fishpi_undercover=debug"))
         .with(tracing_subscriber::fmt::layer())
         .init();
 

@@ -1,13 +1,6 @@
 use crate::game::PlayerId;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum MessageError {
-    #[error("未知的消息类型: {0}")]
-    UnknownMessageType(String),
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameMessage {
@@ -120,58 +113,5 @@ impl MessageQueue {
         }
 
         self.batches.pop_front()
-    }
-}
-
-impl GameMessage {
-    pub fn from_legacy_format(
-        message_type: &str,
-        data: serde_json::Value,
-    ) -> Result<Self, MessageError> {
-        match message_type {
-            "join" => {
-                let player_id = data["player_id"].as_str().unwrap_or_default().to_string();
-                let name = data["name"].as_str().unwrap_or_default().to_string();
-                Ok(GameMessage {
-                    type_: "join".to_string(),
-                    data: serde_json::json!({
-                        "player_id": player_id,
-                        "name": name,
-                    }),
-                })
-            }
-            "leave" => {
-                let player_id = data["player_id"].as_str().unwrap_or_default().to_string();
-                Ok(GameMessage {
-                    type_: "leave".to_string(),
-                    data: serde_json::json!({
-                        "player_id": player_id,
-                    }),
-                })
-            }
-            "start" => Ok(GameMessage {
-                type_: "start".to_string(),
-                data: serde_json::Value::Null,
-            }),
-            "describe" => {
-                let content = data["content"].as_str().unwrap_or_default().to_string();
-                Ok(GameMessage {
-                    type_: "describe".to_string(),
-                    data: serde_json::json!({
-                        "content": content,
-                    }),
-                })
-            }
-            "vote" => {
-                let target_id = data["target_id"].as_str().unwrap_or_default().to_string();
-                Ok(GameMessage {
-                    type_: "vote".to_string(),
-                    data: serde_json::json!({
-                        "target_id": target_id,
-                    }),
-                })
-            }
-            _ => Err(MessageError::UnknownMessageType(message_type.to_string())),
-        }
     }
 }

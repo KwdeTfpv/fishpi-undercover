@@ -15,6 +15,8 @@ use futures_util::{SinkExt, StreamExt};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
 use std::sync::Arc;
 use tracing::{debug, error, info};
 use uuid::Uuid;
@@ -94,8 +96,8 @@ impl WebSocketServer {
         let user_manager = self.user_manager.clone();
 
         let app = Router::new()
-            // .route("/", get(serve_index))
-            // .route("/index.html", get(serve_index))
+            .route("/", get(serve_index))
+            .route("/index.html", get(serve_index))
             .route(
                 "/ws",
                 get({
@@ -338,17 +340,17 @@ async fn handle_generate_login_url(
     }
 }
 
-// /// 提供index.html文件
-// async fn serve_index() -> Html<String> {
-//     let index_path = Path::new("index.html");
-//     match fs::read_to_string(index_path) {
-//         Ok(content) => Html(content),
-//         Err(e) => {
-//             error!("读取index.html失败: {}", e);
-//             Html(format!("<h1>404 Not Found</h1><p>找不到index.html文件</p>"))
-//         }
-//     }
-// }
+/// 提供index.html文件
+async fn serve_index() -> Html<String> {
+    let index_path = Path::new("index.html");
+    match fs::read_to_string(index_path) {
+        Ok(content) => Html(content),
+        Err(e) => {
+            error!("读取index.html失败: {}", e);
+            Html(format!("<h1>404 Not Found</h1><p>找不到index.html文件</p>"))
+        }
+    }
+}
 
 /// 处理WebSocket连接
 async fn handle_room_connection(
@@ -425,7 +427,7 @@ async fn handle_room_connection(
         // 为新房间启动定时器来检查游戏状态超时
         let room_arc = Arc::clone(&new_room);
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
+            let mut interval = tokio::time::interval(config.ping_interval());
             loop {
                 interval.tick().await;
                 if let Err(e) = room_arc.check_timeout().await {

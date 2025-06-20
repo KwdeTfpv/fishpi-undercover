@@ -36,10 +36,29 @@ url = "redis://127.0.0.1:6379"
 pool_size = 10
 
 [security]
-# 速率限制：每分钟最大请求数
-rate_limit_requests = 100
-# 速率限制时间窗口（秒）
-rate_limit_duration = 60
+# 速率限制配置
+[security.rate_limits]
+# 描述阶段时间窗口（秒）
+describe_window = 30
+# 描述阶段最大操作次数
+describe_max_actions = 1
+# 投票阶段时间窗口（秒）
+vote_window = 10
+# 投票阶段最大操作次数
+vote_max_actions = 1
+# 默认时间窗口（秒）
+default_window = 1
+# 默认最大操作次数
+default_max_actions = 10
+
+# 敏感词过滤配置
+[security.word_filter]
+# 敏感词列表
+sensitive_words = ["敏感词1", "敏感词2"]
+# 自定义敏感词列表
+custom_words = []
+# 敏感词替换字符
+replacement = "***"
 
 [auth]
 # 认证域名，用于 CORS 和 cookie 设置

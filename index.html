@@ -100,7 +100,7 @@
         // 登录摸鱼派
         function loginWithFishpi() {
             // 请求我们的后端生成登录URL
-            fetch('https://your-domain.ngrok-free.app/auth/login')
+            fetch('http://49.234.199.95:8989/auth/login')
                 .then(response => response.json())
                 .then(data => {
                     if (data.success && data.login_url) {
@@ -129,7 +129,7 @@
 
         // 验证会话
         function validateSession(sessionId) {
-            fetch(`https://your-domain.ngrok-free.app/auth/validate?session_id=${sessionId}`)
+            fetch(`http://49.234.199.95:8989/auth/validate?session_id=${sessionId}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success && data.user) {
@@ -169,7 +169,7 @@
 
             const roomId = document.getElementById('roomId').value;
             // 修复WebSocket URL构建逻辑
-            let wsUrl = `wss://your-domain.ngrok-free.app/ws`;
+            let wsUrl = `ws://49.234.199.95:8989/ws`;
             const params = new URLSearchParams();
             if (roomId) {
                 params.append('room_id', roomId);
@@ -411,6 +411,15 @@
                     console.log('投票阶段');
                     showVoteSection(data.players);
                     showDescriptions(data.descriptions || []);
+                    
+                    // 如果有投票信息，更新按钮状态
+                    if (data.votes && Array.isArray(data.votes)) {
+                        const myVote = data.votes.find(vote => vote.player_id === playerId);
+                        if (myVote) {
+                            updateVoteButtons(myVote.target_id);
+                        }
+                    }
+                    
                     // 在投票区域添加倒计时
                     const voteSection = document.getElementById('voteSection');
                     const countdownDiv = document.createElement('div');
@@ -565,7 +574,7 @@
             alivePlayers.forEach(player => {
                 if (player.id !== playerId) {
                     voteOptions.innerHTML += `
-                        <button onclick="vote('${player.id}')" id="vote-${player.id}">投票给 ${player.name}</button>
+                        <button onclick="vote('${player.id}')" id="vote-${player.id}" data-target-id="${player.id}">投票给 ${player.name}</button>
                     `;
                 }
             });
@@ -578,6 +587,9 @@
             const voteButtons = document.querySelectorAll('#voteOptions button');
             voteButtons.forEach(button => {
                 button.disabled = false;
+                button.textContent = button.textContent.replace('已投票', '').replace('投票给 ', '投票给 ');
+                button.style.backgroundColor = '';
+                button.style.color = '';
             });
         }
 
@@ -643,6 +655,24 @@
             }));
         }
 
+        function updateVoteButtons(currentVoteTargetId) {
+            const voteButtons = document.querySelectorAll('#voteOptions button');
+            voteButtons.forEach(button => {
+                const targetId = button.getAttribute('data-target-id');
+                if (targetId === currentVoteTargetId) {
+                    button.disabled = true;
+                    button.textContent = '已投票';
+                    button.style.backgroundColor = '#4CAF50';
+                    button.style.color = 'white';
+                } else {
+                    button.disabled = false;
+                    button.textContent = button.textContent.replace('已投票', '').replace('投票给 ', '投票给 ');
+                    button.style.backgroundColor = '';
+                    button.style.color = '';
+                }
+            });
+        }
+
         function vote(targetId) {
             if (!ws || !playerId) {
                 console.error('WebSocket未连接或玩家ID未设置');
@@ -650,12 +680,8 @@
             }
             console.log('发送投票消息，玩家ID:', playerId, '目标ID:', targetId);
             
-            // 禁用所有投票按钮，防止重复投票
-            const voteButtons = document.querySelectorAll('#voteOptions button');
-            voteButtons.forEach(button => {
-                button.disabled = true;
-                button.textContent = '投票中...';
-            });
+            // 更新投票按钮状态
+            updateVoteButtons(targetId);
             
             ws.send(JSON.stringify({
                 type: 'vote',
@@ -746,6 +772,7 @@
                 if (player.id !== playerId) {
                     const button = document.createElement('button');
                     button.textContent = `投票给 ${player.name}`;
+                    button.setAttribute('data-target-id', player.id);
                     button.onclick = () => vote(player.id);
                     voteOptions.appendChild(button);
                 }

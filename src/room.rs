@@ -1,7 +1,7 @@
 use crate::Result;
 use crate::config;
 use crate::game::{GameEvent, GameState, Player, PlayerId, TimeoutResult};
-use crate::message::GameMessage;
+use crate::message::{GameMessage, MessageQueue};
 use crate::storage::Storage;
 use crate::word_bank::WordBank;
 use chrono::Utc;
@@ -20,6 +20,7 @@ pub struct Room {
     player_channels: Arc<DashMap<PlayerId, mpsc::Sender<GameMessage>>>,
     player_order: Arc<Mutex<Vec<PlayerId>>>,
     storage: Arc<Storage>,
+    message_queue: Arc<Mutex<MessageQueue>>,
 }
 
 impl Room {
@@ -41,6 +42,7 @@ impl Room {
             player_channels: Arc::new(DashMap::new()),
             player_order: Arc::new(Mutex::new(Vec::new())),
             storage,
+            message_queue: Arc::new(Mutex::new(MessageQueue::new())),
         }
     }
 
@@ -509,6 +511,17 @@ impl Room {
                 // 保存状态
                 self.save_state().await?;
             }
+            GameEvent::VoteChanged(voter_id, old_target, new_target) => {
+                self.broadcast(GameMessage {
+                    type_: "notification".to_string(),
+                    data: serde_json::json!({
+                        "message": format!("玩家 {} 更改投票：从 {} 改为 {}", voter_id, old_target, new_target)
+                    }),
+                })
+                .await;
+                // 保存状态
+                self.save_state().await?;
+            }
             GameEvent::ChatMessageAdded(chat_message) => {
                 self.broadcast(GameMessage {
                     type_: "chat".to_string(),
@@ -836,6 +849,21 @@ impl Room {
                 );
             }
 
+            // 添加投票信息
+            if let Some(votes) = state.get_votes() {
+                state_data["votes"] = serde_json::Value::Array(
+                    votes
+                        .iter()
+                        .map(|(voter_id, target_id)| {
+                            serde_json::json!({
+                                "player_id": voter_id.to_string(),
+                                "target_id": target_id.to_string()
+                            })
+                        })
+                        .collect(),
+                );
+            }
+
             let state_update = GameMessage {
                 type_: "state_update".to_string(),
                 data: state_data,
@@ -858,6 +886,7 @@ impl Clone for Room {
             player_channels: self.player_channels.clone(),
             player_order: self.player_order.clone(),
             storage: self.storage.clone(),
+            message_queue: self.message_queue.clone(),
         }
     }
 }

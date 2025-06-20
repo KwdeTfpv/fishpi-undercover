@@ -53,10 +53,27 @@ pub struct RedisConfig {
 //     pub file: String,
 // }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct SecurityConfig {
-    pub rate_limit_requests: u32,
-    pub rate_limit_duration: u64,
+    pub rate_limits: RateLimitConfig,
+    pub word_filter: WordFilterConfig,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct RateLimitConfig {
+    pub describe_window: u64,
+    pub describe_max_actions: u32,
+    pub vote_window: u64,
+    pub vote_max_actions: u32,
+    pub default_window: u64,
+    pub default_max_actions: u32,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct WordFilterConfig {
+    pub sensitive_words: Vec<String>,
+    pub custom_words: Vec<String>,
+    pub replacement: String,
 }
 
 #[derive(Debug, Deserialize)]
