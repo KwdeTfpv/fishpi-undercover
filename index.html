@@ -100,7 +100,7 @@
         // 登录摸鱼派
         function loginWithFishpi() {
             // 请求我们的后端生成登录URL
-            fetch('http://49.234.199.95:8989/auth/login')
+            fetch('/auth/login')
                 .then(response => response.json())
                 .then(data => {
                     if (data.success && data.login_url) {
@@ -129,7 +129,7 @@
 
         // 验证会话
         function validateSession(sessionId) {
-            fetch(`http://49.234.199.95:8989/auth/validate?session_id=${sessionId}`)
+            fetch(`/auth/validate?session_id=${sessionId}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success && data.user) {
@@ -169,7 +169,7 @@
 
             const roomId = document.getElementById('roomId').value;
             // 修复WebSocket URL构建逻辑
-            let wsUrl = `ws://49.234.199.95:8989/ws`;
+            let wsUrl = `ws://${window.location.host}/ws`;
             const params = new URLSearchParams();
             if (roomId) {
                 params.append('room_id', roomId);
