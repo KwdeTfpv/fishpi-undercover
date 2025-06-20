@@ -10,12 +10,13 @@
         <div id="loginStatus">
             <p>请先登录摸鱼派账号</p>
             <button onclick="loginWithFishpi()">登录派</button>
+            <button onclick="joinAsAnonymous()" style="margin-left: 10px;">匿名进入</button>
         </div>
         <div id="userInfo" style="display: none;">
             <p>欢迎，<span id="userNickname"></span>！</p>
             <input type="text" id="roomId" placeholder="房间ID（可选）">
             <button onclick="joinGame()">加入游戏</button>
-            <button onclick="logout()">退出登录</button>
+            <button onclick="logout()" id="logoutBtn">退出登录</button>
         </div>
         <div id="roomList" style="margin-top: 20px;"></div>
     </div>
@@ -95,6 +96,21 @@
             document.getElementById('userNickname').textContent = user.nickname;
             document.getElementById('loginStatus').style.display = 'none';
             document.getElementById('userInfo').style.display = 'block';
+            
+            // 根据用户类型显示不同的按钮
+            const logoutBtn = document.getElementById('logoutBtn');
+            if (user.user_id && user.user_id.startsWith('anon_')) {
+                // 匿名用户
+                logoutBtn.textContent = '重新选择';
+                logoutBtn.onclick = function() {
+                    userInfo = null;
+                    showLoginPrompt();
+                };
+            } else {
+                // 登录用户
+                logoutBtn.textContent = '退出登录';
+                logoutBtn.onclick = logout;
+            }
         }
 
         // 登录摸鱼派
@@ -161,20 +177,43 @@
             showLoginPrompt();
         }
 
+        // 匿名进入游戏
+        function joinAsAnonymous() {
+            // 清除任何现有的会话ID
+            localStorage.removeItem('fishpi_session_id');
+            userSessionId = null;
+            
+            // 创建匿名用户信息
+            const randomId = Math.floor(Math.random() * 9000) + 1000;
+            userInfo = {
+                user_id: `anon_${Date.now()}_${randomId}`,
+                username: `匿名用户_${randomId}`,
+                nickname: `匿名用户_${randomId}`,
+                avatar: null
+            };
+            
+            // 显示用户信息界面
+            showUserInfo(userInfo);
+        }
+
         function joinGame() {
-            if (!userSessionId) {
-                alert('请先登录');
+            // 检查是否有用户信息（登录用户或匿名用户）
+            if (!userInfo) {
+                alert('请先登录或选择匿名进入');
                 return;
             }
 
             const roomId = document.getElementById('roomId').value;
             // 修复WebSocket URL构建逻辑
-            let wsUrl = `ws://${window.location.host}/ws`;
+            let wsUrl = `wss://${window.location.host}/ws`;
             const params = new URLSearchParams();
             if (roomId) {
                 params.append('room_id', roomId);
             }
-            params.append('session_id', userSessionId);
+            // 只有在有session_id时才添加session_id参数
+            if (userSessionId) {
+                params.append('session_id', userSessionId);
+            }
             
             if (params.toString()) {
                 wsUrl += `?${params.toString()}`;
@@ -409,25 +448,54 @@
                     break;
                 case 'VotePhase':
                     console.log('投票阶段');
+                    // 清除描述阶段的界面
+                    const gameContent = document.getElementById('gameContent');
+                    gameContent.innerHTML = '';
+                    
                     showVoteSection(data.players);
                     showDescriptions(data.descriptions || []);
                     
                     // 如果有投票信息，更新按钮状态
-                    if (data.votes && Array.isArray(data.votes)) {
-                        const myVote = data.votes.find(vote => vote.player_id === playerId);
+                    if (data.votes && typeof data.votes === 'object' && !Array.isArray(data.votes)) {
+                        // votes是HashMap格式 {voter_id: target_id}
+                        const myVote = data.votes[playerId];
                         if (myVote) {
-                            updateVoteButtons(myVote.target_id);
+                            updateVoteButtons(myVote);
                         }
                     }
                     
-                    // 在投票区域添加倒计时
-                    const voteSection = document.getElementById('voteSection');
-                    const countdownDiv = document.createElement('div');
-                    countdownDiv.id = 'countdown';
-                    countdownDiv.innerHTML = '<h3>投票时间剩余：<span id="countdown-display">60</span>秒</h3>';
-                    voteSection.insertBefore(countdownDiv, voteSection.firstChild);
-                    // 开始60秒倒计时
-                    startCountdown(60, 'vote');
+                    // 检查是否所有玩家都已投票
+                    const alivePlayers = data.players.filter(p => p.is_alive);
+                    const voteCount = data.votes ? Object.keys(data.votes).length : 0;
+                    const allVoted = voteCount >= alivePlayers.length;
+                    
+                    if (!allVoted) {
+                        // 在投票区域添加倒计时
+                        const voteSection = document.getElementById('voteSection');
+                        // 先清除旧的倒计时
+                        const existingCountdown = document.getElementById('countdown');
+                        if (existingCountdown) {
+                            existingCountdown.remove();
+                        }
+                        const countdownDiv = document.createElement('div');
+                        countdownDiv.id = 'countdown';
+                        countdownDiv.innerHTML = '<h3>投票时间剩余：<span id="countdown-display">60</span>秒</h3>';
+                        voteSection.insertBefore(countdownDiv, voteSection.firstChild);
+                        // 开始60秒倒计时
+                        startCountdown(60, 'vote');
+                    } else {
+                        // 所有玩家都已投票，显示等待结果
+                        const voteSection = document.getElementById('voteSection');
+                        // 先清除旧的倒计时
+                        const existingCountdown = document.getElementById('countdown');
+                        if (existingCountdown) {
+                            existingCountdown.remove();
+                        }
+                        const countdownDiv = document.createElement('div');
+                        countdownDiv.id = 'countdown';
+                        countdownDiv.innerHTML = '<h3>所有玩家已投票，正在统计结果...</h3>';
+                        voteSection.insertBefore(countdownDiv, voteSection.firstChild);
+                    }
                     
                     // 添加聊天区域
                     const voteChatDiv = document.createElement('div');

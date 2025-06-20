@@ -368,7 +368,7 @@ async fn handle_room_connection(
     );
     let (mut ws_sender, mut ws_receiver) = socket.split();
 
-    // 验证用户会话（必需）
+    // 直接创建匿名用户，跳过登录验证
     let user = if let Some(session_id) = session_id {
         let mut user_manager_guard = user_manager.write().await;
         match user_manager_guard.get_user_by_session(&session_id) {
@@ -377,35 +377,30 @@ async fn handle_room_connection(
                 debug!("用户已登录: {} ({})", display_name, user.username);
                 Some(user.clone())
             }
-            Err(e) => {
-                error!("会话验证失败: {}", e);
-                // 发送错误消息并关闭连接
-                let error_msg = GameMessage {
-                    type_: "error".to_string(),
-                    data: serde_json::json!({
-                        "code": "AuthError",
-                        "message": "请先登录"
-                    }),
-                };
-                if let Ok(text) = serde_json::to_string(&error_msg) {
-                    let _ = ws_sender.send(Message::Text(text)).await;
-                }
-                return; // 关闭连接
+            Err(_) => {
+                // 会话验证失败，创建匿名用户
+                debug!("会话验证失败，使用匿名用户");
+                Some(crate::user::User {
+                    id: format!("anon_{}", uuid::Uuid::new_v4()),
+                    username: format!("匿名用户_{}", rand::rng().random_range(1000..9999)),
+                    nickname: Some(format!("匿名用户_{}", rand::rng().random_range(1000..9999))),
+                    avatar: None,
+                    created_at: chrono::Utc::now(),
+                    last_login: chrono::Utc::now(),
+                })
             }
         }
     } else {
-        // 没有会话ID，发送错误消息并关闭连接
-        let error_msg = GameMessage {
-            type_: "error".to_string(),
-            data: serde_json::json!({
-                "code": "AuthRequired",
-                "message": "需要登录才能进入游戏"
-            }),
-        };
-        if let Ok(text) = serde_json::to_string(&error_msg) {
-            let _ = ws_sender.send(Message::Text(text)).await;
-        }
-        return; // 关闭连接
+        // 没有会话ID，创建匿名用户
+        debug!("没有会话ID，使用匿名用户");
+        Some(crate::user::User {
+            id: format!("anon_{}", uuid::Uuid::new_v4()),
+            username: format!("匿名用户_{}", rand::rng().random_range(1000..9999)),
+            nickname: Some(format!("匿名用户_{}", rand::rng().random_range(1000..9999))),
+            avatar: None,
+            created_at: chrono::Utc::now(),
+            last_login: chrono::Utc::now(),
+        })
     };
 
     // 获取或创建房间

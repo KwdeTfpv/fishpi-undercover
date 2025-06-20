@@ -280,10 +280,12 @@ impl GameState {
                     .filter_map(|id| players.get(id).cloned())
                     .collect();
 
-                let undercover_count = if players_vec.len() <= 6 {
+                let undercover_count = if players_vec.len() <= 5 {
                     1
+                } else if players_vec.len() <= 8 {
+                    2
                 } else {
-                    (players_vec.len() as f32 * 0.25).ceil() as usize
+                    3
                 };
 
                 let mut rng = rand::rng();
@@ -396,24 +398,21 @@ impl GameState {
                     return Err("您已被淘汰，无法投票".to_string());
                 }
 
+                if votes.contains_key(&voter_id) {
+                    return Err("您已经投过票了".to_string());
+                }
+
                 if !players.iter().any(|p| p.id == target_id && p.is_alive) {
                     return Err("目标玩家已被淘汰".to_string());
                 }
 
-                // 检查是否已经投过票
-                if let Some(previous_target) = votes.get(&voter_id) {
-                    // 更改投票
-                    if previous_target == &target_id {
-                        return Err("您已经投给这个玩家了".to_string());
-                    }
-                    
-                    let previous_target = previous_target.clone();
-                    votes.insert(voter_id.clone(), target_id.clone());
-                    
-                    Ok(GameEvent::VoteChanged(voter_id, previous_target, target_id))
+                votes.insert(voter_id.clone(), target_id.clone());
+
+                if votes.len() == players.iter().filter(|p| p.is_alive).count() {
+                    let votes_clone = votes.clone();
+                    self.process_votes()?;
+                    Ok(GameEvent::VotePhaseComplete(votes_clone))
                 } else {
-                    // 首次投票
-                    votes.insert(voter_id.clone(), target_id.clone());
                     Ok(GameEvent::VoteAdded(voter_id, target_id))
                 }
             }
@@ -546,7 +545,7 @@ impl GameState {
                         players: players.clone(),
                     };
                     Ok(GameEvent::GameOver(Role::Civilian))
-                } else if undercover_count > civilian_count {
+                } else if undercover_count >= civilian_count {
                     *self = GameState::GameOver {
                         winner: Role::Undercover,
                         players: players.clone(),
