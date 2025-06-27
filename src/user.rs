@@ -1,4 +1,5 @@
 use crate::Result;
+use crate::storage::Storage;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -46,39 +47,23 @@ struct FishpiUserInfoData {
     pub user_name: String,
 }
 
-/// 用户管理器
+/// 用户管理器 - 只负责业务逻辑，数据存储交给Storage
 pub struct UserManager {
-    sessions: HashMap<Uuid, UserSession>,
-    users: HashMap<String, User>,
+    storage: Storage,
     fishpi_base_url: String,
 }
 
 impl UserManager {
     /// 创建新的用户管理器
-    pub fn new() -> Self {
+    pub fn new(storage: Storage) -> Self {
         UserManager {
-            sessions: HashMap::new(),
-            users: HashMap::new(),
+            storage,
             fishpi_base_url: "https://fishpi.cn".to_string(),
         }
     }
 
     /// 生成摸鱼派登录URL
     pub fn generate_login_url(&self, return_url: &str, realm: &str) -> Result<String> {
-        // 验证参数格式
-        if !return_url.starts_with("https://") {
-            return Err(crate::Error::Auth("return_to必须是HTTPS".to_string()));
-        }
-
-        if !realm.starts_with("https://") {
-            return Err(crate::Error::Auth("realm必须是HTTPS".to_string()));
-        }
-
-        // 验证realm是return_to的前缀
-        if !return_url.starts_with(realm) {
-            return Err(crate::Error::Auth("realm必须是return_to的前缀".to_string()));
-        }
-
         let mut url = Url::parse(&format!("{}/openid/login", self.fishpi_base_url))
             .map_err(|e| crate::Error::Network(anyhow::anyhow!(e)))?;
 
@@ -108,12 +93,15 @@ impl UserManager {
     }
 
     /// 验证摸鱼派OpenID响应
-    pub async fn verify_openid_response(&self, params: &HashMap<String, String>) -> Result<String> {
+    pub async fn verify_openid_response(
+        &self,
+        openid_params: &HashMap<String, String>,
+    ) -> Result<String> {
         // 检查是否是成功的响应
-        if let Some(mode) = params.get("openid.mode") {
+        if let Some(mode) = openid_params.get("openid.mode") {
             if mode == "id_res" {
                 // 检查response_nonce的有效期
-                if let Some(response_nonce) = params.get("openid.response_nonce") {
+                if let Some(response_nonce) = openid_params.get("openid.response_nonce") {
                     if !self.is_response_nonce_valid(response_nonce)? {
                         return Err(crate::Error::Auth("response_nonce已过期或无效".to_string()));
                     }
@@ -122,10 +110,10 @@ impl UserManager {
                 }
 
                 // 进行签名校验
-                self.verify_signature(params).await?;
+                self.verify_signature(openid_params).await?;
 
                 // 提取用户ID
-                if let Some(claimed_id) = params.get("openid.claimed_id") {
+                if let Some(claimed_id) = openid_params.get("openid.claimed_id") {
                     // /openid/id/123456
                     if let Some(user_id) = claimed_id.split('/').last() {
                         return Ok(user_id.to_string());
@@ -259,14 +247,15 @@ impl UserManager {
         }
     }
 
-    /// 获取用户信息
-    pub async fn get_user_info(&mut self, user_id: &str) -> Result<User> {
-        // 检查缓存
-        if let Some(user) = self.users.get(user_id) {
-            return Ok(user.clone());
+    /// 获取用户信息（从Storage或API）
+    pub async fn get_user_info(&self, user_id: &str) -> Result<User> {
+        // 先从Storage获取缓存
+        if let Some(user) = self.storage.get_user(user_id).await? {
+            debug!("从缓存获取用户信息: {}", user_id);
+            return Ok(user);
         }
 
-        // 从摸鱼派API获取用户信息
+        // 缓存中没有，从摸鱼派API获取用户信息
         let url = format!(
             "{}/api/user/getInfoById?userId={}",
             self.fishpi_base_url, user_id
@@ -299,15 +288,16 @@ impl UserManager {
 
             let user = User {
                 id: user_id.to_string(),
-                username: fishpi_user.data.user_name,
-                nickname: fishpi_user.data.user_nickname,
+                username: fishpi_user.data.user_name.clone(),
+                nickname: fishpi_user.data.user_nickname.or(Some(fishpi_user.data.user_name)),
                 avatar: fishpi_user.data.user_avatar_url,
                 created_at: Utc::now(),
                 last_login: Utc::now(),
             };
 
-            // 缓存用户信息
-            self.users.insert(user.id.clone(), user.clone());
+            // 保存到Storage缓存
+            self.storage.save_user(&user).await?;
+            debug!("用户信息已保存到缓存: {}", user_id);
 
             Ok(user)
         } else {
@@ -316,7 +306,7 @@ impl UserManager {
     }
 
     /// 创建用户会话
-    pub fn create_session(&mut self, user_id: &str) -> Result<Uuid> {
+    pub async fn create_session(&self, user_id: &str) -> Result<Uuid> {
         let session_id = Uuid::new_v4();
         let now = Utc::now();
         let expires_at = now + chrono::Duration::days(30); // 30天过期
@@ -328,7 +318,8 @@ impl UserManager {
             expires_at,
         };
 
-        self.sessions.insert(session_id, session);
+        // 保存会话到Storage
+        self.storage.save_session(&session).await?;
 
         debug!("创建用户会话: {} -> {}", session_id, user_id);
 
@@ -336,12 +327,13 @@ impl UserManager {
     }
 
     /// 验证会话
-    pub fn validate_session(&self, session_id: &Uuid) -> Result<&UserSession> {
-        if let Some(session) = self.sessions.get(session_id) {
+    pub async fn validate_session(&self, session_id: &Uuid) -> Result<UserSession> {
+        if let Some(session) = self.storage.get_session(session_id).await? {
             if session.expires_at > Utc::now() {
                 return Ok(session);
             } else {
-                // 会话已过期，应该清理
+                // 会话已过期，删除它
+                self.storage.delete_session(session_id).await?;
                 return Err(crate::Error::Auth("会话已过期".to_string()));
             }
         }
@@ -350,37 +342,38 @@ impl UserManager {
     }
 
     /// 获取会话对应的用户
-    pub fn get_user_by_session(&mut self, session_id: &Uuid) -> Result<&User> {
+    pub async fn get_user_by_session(&self, session_id: &Uuid) -> Result<User> {
         // 先验证会话并获取用户ID
         let user_id = {
-            let session = self.validate_session(session_id)?;
+            let session = self.validate_session(session_id).await?;
             session.user_id.clone()
         };
 
         // 验证成功，延长会话有效期
-        self.extend_session(session_id)?;
+        self.extend_session(session_id).await?;
 
-        self.users
-            .get(&user_id)
-            .ok_or_else(|| crate::Error::Auth("用户不存在".to_string()))
+        // 获取用户信息
+        self.get_user_info(&user_id).await
     }
 
     /// 删除会话
-    pub fn remove_session(&mut self, session_id: &Uuid) {
-        self.sessions.remove(session_id);
+    pub async fn remove_session(&self, session_id: &Uuid) -> Result<()> {
+        self.storage.delete_session(session_id).await?;
         debug!("删除用户会话: {}", session_id);
+        Ok(())
     }
 
-    /// 清理过期会话
-    pub fn cleanup_expired_sessions(&mut self) {
-        let now = Utc::now();
-        self.sessions.retain(|_, session| session.expires_at > now);
-        debug!("清理过期会话完成");
+    /// 延长会话有效期
+    pub async fn extend_session(&self, session_id: &Uuid) -> Result<()> {
+        let new_expires_at = Utc::now() + chrono::Duration::days(5); // 延长30天
+        self.storage.extend_session(session_id, new_expires_at).await?;
+        debug!("延长会话有效期: {}", session_id);
+        Ok(())
     }
 
     /// 处理登录流程
     pub async fn handle_login(
-        &mut self,
+        &self,
         openid_params: &HashMap<String, String>,
     ) -> Result<(Uuid, User)> {
         // 验证OpenID响应
@@ -390,25 +383,17 @@ impl UserManager {
         let user = self.get_user_info(&user_id).await?;
 
         // 创建会话
-        let session_id = self.create_session(&user_id)?;
+        let session_id = self.create_session(&user_id).await?;
 
         Ok((session_id, user))
-    }
-
-    /// 延长会话有效期
-    pub fn extend_session(&mut self, session_id: &Uuid) -> Result<()> {
-        if let Some(session) = self.sessions.get_mut(session_id) {
-            session.expires_at = Utc::now() + chrono::Duration::days(30); // 延长30天
-            debug!("延长会话有效期: {}", session_id);
-            Ok(())
-        } else {
-            Err(crate::Error::Auth("会话不存在".to_string()))
-        }
     }
 }
 
 impl Default for UserManager {
     fn default() -> Self {
-        Self::new()
+        // 这里需要传入Storage实例，但在Default实现中无法创建
+        // 移除Default实现，或者使用Option<Storage>
+        panic!("UserManager需要Storage实例，不能使用Default实现")
     }
 }
+

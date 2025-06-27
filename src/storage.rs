@@ -1,4 +1,5 @@
 use crate::game::{GameState, Player, Role};
+use crate::user::{User, UserSession};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use hex;
@@ -233,6 +234,7 @@ impl Storage {
         Ok(results)
     }
 
+    /// 获取玩家统计信息
     pub async fn get_player_stats(&self, player_id: Uuid) -> Result<PlayerStats> {
         let mut conn = self.manager.lock().await;
         let key = format!("player_stats:{}", player_id);
@@ -245,6 +247,41 @@ impl Storage {
             }
             None => Ok(PlayerStats::default()),
         }
+    }
+
+    /// 检查玩家是否已在其他房间，返回当前房间ID
+    pub async fn get_player_current_room(&self, player_id: &str) -> Result<Option<String>> {
+        let mut conn = self.manager.lock().await;
+        let key = format!("player:{}", player_id);
+        let stored_room_id: Option<String> = conn.hget(&key, "room_id").await?;
+        Ok(stored_room_id)
+    }
+
+    /// 检查玩家是否已在其他房间（保持向后兼容）
+    pub async fn is_player_in_other_room(&self, player_id: &str, current_room_id: &str) -> Result<bool> {
+        if let Some(room_id) = self.get_player_current_room(player_id).await? {
+            Ok(room_id != current_room_id)
+        } else {
+            Ok(false) // 玩家没有房间信息，说明不在任何房间
+        }
+    }
+
+    /// 清理玩家的房间信息（当玩家离开房间时调用）
+    pub async fn clear_player_room_info(&self, player_id: &str) -> Result<()> {
+        let mut conn = self.manager.lock().await;
+        let key = format!("player:{}", player_id);
+        conn.del::<_, ()>(&key).await?;
+        Ok(())
+    }
+
+    /// 保存玩家房间信息
+    pub async fn save_player_room_info(&self, player_id: &str, name: &str, room_id: &str) -> Result<()> {
+        let mut conn = self.manager.lock().await;
+        let key = format!("player:{}", player_id);
+        conn.hset::<_, _, _, ()>(&key, "name", name).await?;
+        conn.hset::<_, _, _, ()>(&key, "room_id", room_id).await?;
+        conn.hset::<_, _, _, ()>(&key, "last_active", chrono::Utc::now().timestamp()).await?;
+        Ok(())
     }
 
     pub async fn update_player_stats(&self, player_id: Uuid, stats: &PlayerStats) -> Result<()> {
@@ -275,6 +312,131 @@ impl Storage {
             }
             None => Ok(None),
         }
+    }
+
+    /// 保存用户会话
+    pub async fn save_session(&self, session: &UserSession) -> Result<()> {
+        let key = format!("session:{}", session.session_id);
+        let session_json = serde_json::to_string(session)
+            .map_err(|e| crate::Error::Storage(e.to_string()))?;
+        
+        let mut conn = self.manager.lock().await;
+        // 设置过期时间（秒）
+        let ttl = (session.expires_at - Utc::now()).num_seconds().max(0) as u64;
+        conn.set_ex::<_, _, ()>(&key, &session_json, ttl)
+            .await
+            .map_err(|e| crate::Error::Storage(e.to_string()))?;
+        
+        Ok(())
+    }
+
+    /// 获取用户会话
+    pub async fn get_session(&self, session_id: &Uuid) -> Result<Option<UserSession>> {
+        let key = format!("session:{}", session_id);
+        let mut conn = self.manager.lock().await;
+        
+        let session_json: Option<String> = conn
+            .get(&key)
+            .await
+            .map_err(|e| crate::Error::Storage(e.to_string()))?;
+        
+        match session_json {
+            Some(json) => {
+                let session: UserSession = serde_json::from_str(&json)
+                    .map_err(|e| crate::Error::Storage(e.to_string()))?;
+                Ok(Some(session))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// 删除用户会话
+    pub async fn delete_session(&self, session_id: &Uuid) -> Result<()> {
+        let key = format!("session:{}", session_id);
+        let mut conn = self.manager.lock().await;
+        
+        conn.del::<_, ()>(&key)
+            .await
+            .map_err(|e| crate::Error::Storage(e.to_string()))?;
+        
+        Ok(())
+    }
+
+    /// 更新会话过期时间
+    pub async fn extend_session(&self, session_id: &Uuid, new_expires_at: DateTime<Utc>) -> Result<()> {
+        let key = format!("session:{}", session_id);
+        let mut conn = self.manager.lock().await;
+        
+        // 先获取现有会话
+        let session_json: Option<String> = conn
+            .get(&key)
+            .await
+            .map_err(|e| crate::Error::Storage(e.to_string()))?;
+        
+        if let Some(json) = session_json {
+            let mut session: UserSession = serde_json::from_str(&json)
+                .map_err(|e| crate::Error::Storage(e.to_string()))?;
+            
+            // 更新过期时间
+            session.expires_at = new_expires_at;
+            let updated_json = serde_json::to_string(&session)
+                .map_err(|e| crate::Error::Storage(e.to_string()))?;
+            
+            // 重新保存，设置新的过期时间
+            let ttl = (new_expires_at - Utc::now()).num_seconds().max(0) as u64;
+            conn.set_ex::<_, _, ()>(&key, &updated_json, ttl)
+                .await
+                .map_err(|e| crate::Error::Storage(e.to_string()))?;
+        }
+        
+        Ok(())
+    }
+
+    /// 保存用户信息
+    pub async fn save_user(&self, user: &User) -> Result<()> {
+        let key = format!("user:{}", user.id);
+        let user_json = serde_json::to_string(user)
+            .map_err(|e| crate::Error::Storage(e.to_string()))?;
+        
+        let mut conn = self.manager.lock().await;
+        // 用户信息不过期，永久保存
+        conn.set::<_, _, ()>(&key, &user_json)
+            .await
+            .map_err(|e| crate::Error::Storage(e.to_string()))?;
+        
+        Ok(())
+    }
+
+    /// 获取用户信息
+    pub async fn get_user(&self, user_id: &str) -> Result<Option<User>> {
+        let key = format!("user:{}", user_id);
+        let mut conn = self.manager.lock().await;
+        
+        let user_json: Option<String> = conn
+            .get(&key)
+            .await
+            .map_err(|e| crate::Error::Storage(e.to_string()))?;
+        
+        match user_json {
+            Some(json) => {
+                let user: User = serde_json::from_str(&json)
+                    .map_err(|e| crate::Error::Storage(e.to_string()))?;
+                Ok(Some(user))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// 删除用户信息
+    pub async fn delete_user(&self, user_id: &str) -> Result<()> {
+        let key = format!("user:{}", user_id);
+        let mut conn = self.manager.lock().await;
+        
+        conn.del::<_, ()>(&key)
+            .await
+            .map_err(|e| crate::Error::Storage(e.to_string()))?;
+        
+        Ok(())
     }
 }
 

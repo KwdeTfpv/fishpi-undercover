@@ -9,7 +9,12 @@
 - **协议**: WebSocket + HTTP
 - **认证方式**: 摸鱼派OpenID认证
 - **数据存储**: Redis
-- **默认端口**: 8080
+- **架构**: HTTP和WebSocket服务器分离
+  - **HTTP服务器**: 处理认证回调、会话验证、静态资源等
+  - **WebSocket服务器**: 处理游戏实时通信
+- **默认端口**: 
+  - HTTP服务器: 8080
+  - WebSocket服务器: 8990
 
 ## HTTP 接口
 
@@ -31,42 +36,30 @@
 
 **描述**: 获取摸鱼派登录URL
 
-**请求示例**:
-```javascript
-// 前端调用示例
-fetch('/auth/login')
-  .then(response => response.json())
-  .then(data => {
-    if (data.success) {
-      // 跳转到摸鱼派登录页面
-      window.location.href = data.login_url;
-    } else {
-      console.error('获取登录URL失败:', data.error);
-    }
-  })
-  .catch(error => {
-    console.error('请求失败:', error);
-  });
+**查询参数**:
+- `callback_url` (可选): 登录成功后的回调地址，如果不传则使用默认地址
+
+**示例请求**:
+```bash
+# 使用默认回调地址
+GET /auth/login
+
+# 指定自定义回调地址
+GET /auth/login?callback_url=http://localhost:3000/game
+GET /auth/login?callback_url=https://your-app.com/dashboard
 ```
 
 **响应格式**:
 ```json
 {
     "success": true,
-    "login_url": "https://fishpi.cn/openid/auth?openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0&openid.mode=checkid_setup&openid.return_to=..."
-}
-```
-
-**错误响应**:
-```json
-{
-    "success": false,
-    "error": "错误信息"
+    "login_url": "https://fishpi.cn/openid/login?openid.ns=...&openid.return_to=..."
 }
 ```
 
 **说明**:
 - `login_url`: 完整的摸鱼派登录URL，包含所有必要的OpenID参数
+- 如果提供了 `callback_url`，它会被编码到 `return_to` 参数中
 - 前端需要将用户重定向到此URL进行登录
 - 登录URL包含回调地址，用户登录后会自动重定向回您的服务器
 
@@ -79,7 +72,7 @@ fetch('/auth/login')
 - 此接口由服务器自动处理，前端无需干预
 - 摸鱼派认证完成后会自动重定向到此接口
 - 服务器验证OpenID参数，创建session_id
-- 返回HTML页面，自动保存session_id并跳转到游戏页面
+- 返回HTML页面，自动保存session_id并跳转到指定页面
 
 **OpenID参数**:
 - `openid.ns`: OpenID命名空间 (固定值: `http://specs.openid.net/auth/2.0`)
@@ -93,6 +86,9 @@ fetch('/auth/login')
 - `openid.signed`: 签名字段列表
 - `openid.sig`: 签名值
 
+**自定义参数**:
+- `callback_url`: 登录成功后的重定向地址（从return_to参数中解析）
+
 **服务器处理流程**:
 1. 接收OpenID回调参数
 2. 验证OpenID签名
@@ -100,7 +96,8 @@ fetch('/auth/login')
 4. 获取用户信息
 5. 创建或更新用户会话
 6. 生成session_id
-7. 返回HTML页面
+7. 解析callback_url参数
+8. 返回HTML页面并重定向到指定地址
 
 **响应HTML页面**:
 ```html
@@ -113,33 +110,23 @@ fetch('/auth/login')
 <body>
     <h1>登录成功！</h1>
     <p>欢迎，用户昵称！</p>
-    <p>正在跳转到游戏页面...</p>
+    <p>正在跳转...</p>
     <script>
         // 保存session_id到localStorage
         localStorage.setItem('fishpi_session_id', '550e8400-e29b-41d4-a716-446655440000');
-        // 跳转到游戏页面，并传递session_id参数
-        window.location.href = '/index.html?session_id=550e8400-e29b-41d4-a716-446655440000';
+        // 跳转到指定页面，并传递session_id参数
+        const redirectUrl = 'http://localhost:3000/game';
+        const separator = redirectUrl.includes('?') ? '&' : '?';
+        window.location.href = redirectUrl + separator + 'session_id=550e8400-e29b-41d4-a716-446655440000';
     </script>
 </body>
 </html>
 ```
 
-**错误处理**:
-如果认证失败，服务器会返回错误页面：
-```html
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>登录失败</title>
-</head>
-<body>
-    <h1>登录失败</h1>
-    <p>错误信息: 具体错误描述</p>
-    <p><a href="/index.html">返回首页</a></p>
-</body>
-</html>
-```
+**重定向逻辑**:
+- 如果提供了 `callback_url` 参数，重定向到该地址
+- 如果没有提供，重定向到默认的 `/index.html`
+- session_id 会作为 URL 参数传递到重定向地址
 
 #### 1.3 验证会话
 **接口**: `GET /auth/validate`
@@ -334,11 +321,57 @@ initApp();
 
 **响应**: HTML页面
 
+### 3. 房间状态
+
+#### 3.1 获取房间状态
+**接口**: `GET /rooms/status`
+
+**描述**: 获取所有房间的状态信息
+
+**请求示例**:
+```javascript
+// 获取房间状态
+fetch('/rooms/status')
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      console.log('房间状态:', data.rooms);
+      console.log('总房间数:', data.total_rooms);
+    }
+  });
+```
+
+**成功响应**:
+```json
+{
+    "success": true,
+    "rooms": [
+        {
+            "room_id": "ABC123",
+            "player_count": 4,
+            "idle_seconds": 120,
+            "is_game_over": false,
+            "is_empty": false,
+            "should_be_deleted": false
+        }
+    ],
+    "total_rooms": 1
+}
+```
+
+**说明**:
+- `room_id`: 房间ID
+- `player_count`: 当前玩家数量
+- `idle_seconds`: 房间空闲时间（秒）
+- `is_game_over`: 游戏是否已结束
+- `is_empty`: 房间是否为空
+- `should_be_deleted`: 房间是否应该被删除
+
 ## WebSocket 接口
 
 ### 连接建立
 
-**连接地址**: `ws://{host}:{port}/ws`
+**连接地址**: `ws://{host}:{port}/ws` 或 `wss://{host}:{port}/ws`
 
 **查询参数**:
 - `room_id`: 房间ID (可选，不提供则自动生成)
@@ -346,8 +379,14 @@ initApp();
 
 **连接示例**:
 ```
-ws://your-domain.com:8080/ws?room_id=room123&session_id=550e8400-e29b-41d4-a716-446655440000
+ws://your-domain.com:8990/ws?room_id=room123&session_id=550e8400-e29b-41d4-a716-446655440000
+wss://your-domain.com:443/ws?room_id=room123&session_id=550e8400-e29b-41d4-a716-446655440000
 ```
+
+**说明**:
+- 如果未提供`room_id`，服务器会自动生成一个6位随机字母的房间ID
+- `session_id`必须通过摸鱼派认证获得，格式为UUID
+- 连接建立后，服务器会发送用户信息和房间列表
 
 ### 消息格式
 
@@ -632,6 +671,7 @@ ws://your-domain.com:8080/ws?room_id=room123&session_id=550e8400-e29b-41d4-a716-
 | `RateLimitExceeded` | 操作频率超限 |
 | `InvalidMessageFormat` | 消息格式无效 |
 | `WordBankError` | 词语库错误 |
+| `ConfigError` | 配置错误 |
 
 ## 游戏配置
 
@@ -684,34 +724,64 @@ ws://your-domain.com:8080/ws?room_id=room123&session_id=550e8400-e29b-41d4-a716-
 
 ## 部署说明
 
+### 架构说明
+
+系统支持两种部署模式：
+
+#### 1. 分离模式（推荐）
+- HTTP服务器和WebSocket服务器运行在不同端口
+- 适合生产环境，可以独立扩展和负载均衡
+- 支持不同的域名配置
+
+#### 2. 兼容模式
+- HTTP和WebSocket服务器运行在同一端口
+- 适合开发环境或简单部署
+- 使用传统单服务器架构
+
 ### 环境要求
 - Rust 1.70+
 - Redis 6.0+
 - 摸鱼派开发者账号
 
-### 配置说明
-配置文件 `config.toml`:
+### 配置示例
+
+#### 开发环境配置
 ```toml
 [server]
 host = "127.0.0.1"
 port = 8080
+http_port = 8080
+ws_port = 8080
+```
 
-[game]
-min_players = 4
-max_players = 12
-describe_time_limit = 60
-vote_time_limit = 60
-
-[redis]
-url = "redis://127.0.0.1:6379"
+#### 生产环境配置
+```toml
+[server]
+host = "0.0.0.0"
+port = 8989
+http_port = 443  # HTTPS端口
+ws_port = 8990   # WebSocket端口
 
 [auth]
 domain = "https://your-domain.com"
 ```
 
-### 启动命令
-```bash
-cargo run
+### 前端连接示例
+
+```javascript
+// 连接WebSocket服务器
+function connectWebSocket(sessionId, roomId = null) {
+  const wsHost = 'ws.your-domain.com';  // WebSocket服务器地址
+  const wsPort = 8990;                  // WebSocket服务器端口
+  
+  let wsUrl = `ws://${wsHost}:${wsPort}/ws?session_id=${sessionId}`;
+  if (roomId) {
+    wsUrl += `&room_id=${roomId}`;
+  }
+  
+  const ws = new WebSocket(wsUrl);
+  // WebSocket事件处理...
+}
 ```
 
 ## 注意事项
@@ -721,3 +791,195 @@ cargo run
 3. **状态同步**: 每次状态变更都会推送完整的房间信息
 4. **错误处理**: 所有操作都可能失败，需要做好错误处理
 5. **安全考虑**: 建议在生产环境中使用HTTPS/WSS 
+
+## 使用示例
+
+### 前端集成示例
+
+#### 1. 基本登录流程（使用默认回调）
+
+```javascript
+class AuthManager {
+  constructor() {
+    this.sessionId = localStorage.getItem('fishpi_session_id');
+  }
+
+  // 检查是否已登录
+  async checkLoginStatus() {
+    if (!this.sessionId) {
+      return false;
+    }
+
+    try {
+      const response = await fetch(`/auth/validate?session_id=${this.sessionId}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        this.user = data.user;
+        return true;
+      } else {
+        // 清除无效的session_id
+        this.clearSession();
+        return false;
+      }
+    } catch (error) {
+      console.error('验证会话失败:', error);
+      this.clearSession();
+      return false;
+    }
+  }
+
+  // 开始登录流程（使用默认回调）
+  async startLogin() {
+    try {
+      const response = await fetch('/auth/login');
+      const data = await response.json();
+      
+      if (data.success) {
+        // 跳转到摸鱼派登录页面
+        window.location.href = data.login_url;
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (error) {
+      console.error('获取登录URL失败:', error);
+      throw error;
+    }
+  }
+
+  // 开始登录流程（指定自定义回调）
+  async startLoginWithCallback(callbackUrl) {
+    try {
+      const encodedCallback = encodeURIComponent(callbackUrl);
+      const response = await fetch(`/auth/login?callback_url=${encodedCallback}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        // 跳转到摸鱼派登录页面
+        window.location.href = data.login_url;
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (error) {
+      console.error('获取登录URL失败:', error);
+      throw error;
+    }
+  }
+
+  // 清除会话
+  clearSession() {
+    this.sessionId = null;
+    this.user = null;
+    localStorage.removeItem('fishpi_session_id');
+  }
+
+  // 获取用户信息
+  getUser() {
+    return this.user;
+  }
+
+  // 获取session_id
+  getSessionId() {
+    return this.sessionId;
+  }
+}
+
+// 使用示例
+const auth = new AuthManager();
+
+// 页面加载时检查登录状态
+async function initApp() {
+  const isLoggedIn = await auth.checkLoginStatus();
+  
+  if (isLoggedIn) {
+    // 已登录，显示游戏界面
+    showGameInterface();
+    // 连接WebSocket
+    connectWebSocket(auth.getSessionId());
+  } else {
+    // 未登录，显示登录按钮
+    showLoginButton();
+  }
+}
+
+// 显示登录按钮
+function showLoginButton() {
+  const loginButton = document.createElement('button');
+  loginButton.textContent = '登录';
+  loginButton.onclick = () => {
+    // 使用默认回调地址
+    auth.startLogin();
+  };
+  document.body.appendChild(loginButton);
+}
+
+// 显示登录按钮（指定回调地址）
+function showLoginButtonWithCallback() {
+  const loginButton = document.createElement('button');
+  loginButton.textContent = '登录';
+  loginButton.onclick = () => {
+    // 指定登录成功后的回调地址
+    auth.startLoginWithCallback('http://localhost:3000/game');
+  };
+  document.body.appendChild(loginButton);
+}
+```
+
+#### 2. 处理登录回调
+
+```javascript
+// 页面加载时检查URL参数
+function handleLoginCallback() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const sessionId = urlParams.get('session_id');
+  
+  if (sessionId) {
+    // 保存session_id到localStorage
+    localStorage.setItem('fishpi_session_id', sessionId);
+    
+    // 清除URL参数
+    const newUrl = window.location.pathname;
+    window.history.replaceState({}, document.title, newUrl);
+    
+    // 初始化应用
+    initApp();
+  }
+}
+
+// 页面加载时执行
+document.addEventListener('DOMContentLoaded', () => {
+  handleLoginCallback();
+  initApp();
+});
+```
+
+### 不同场景的使用方式
+
+#### 1. 本地开发环境
+
+```javascript
+// 本地开发时指定回调地址
+auth.startLoginWithCallback('http://localhost:3000/game');
+```
+
+#### 2. 生产环境
+
+```javascript
+// 生产环境使用默认回调或指定生产地址
+auth.startLoginWithCallback('https://your-app.com/dashboard');
+```
+
+#### 3. 多页面应用
+
+```javascript
+// 不同页面指定不同的回调地址
+auth.startLoginWithCallback('https://your-app.com/profile');
+auth.startLoginWithCallback('https://your-app.com/settings');
+```
+
+### 注意事项
+
+1. **URL编码**: 前端在传递 `callback_url` 时需要进行 URL 编码
+2. **域名验证**: 建议在生产环境中验证回调地址的域名
+3. **HTTPS要求**: 生产环境的回调地址应该使用 HTTPS
+4. **参数传递**: session_id 会作为 URL 参数传递到回调地址

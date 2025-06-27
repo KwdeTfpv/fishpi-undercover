@@ -1,2 +1,16 @@
 [target.x86_64-unknown-linux-gnu]
 image = "ghcr.io/cross-rs/x86_64-unknown-linux-gnu:latest"
+
+# 添加环境变量配置
+[build.env]
+passthrough = [
+    "RUSTFLAGS",
+    "CARGO_PROFILE_RELEASE_LTO",
+    "CARGO_PROFILE_RELEASE_CODEGEN_UNITS",
+    "CARGO_PROFILE_RELEASE_PANIC",
+    "CARGO_PROFILE_RELEASE_STRIP"
+]
+
+# 设置环境变量
+[build.env.vars]
+RUSTFLAGS = "-C target-feature=+crt-static"

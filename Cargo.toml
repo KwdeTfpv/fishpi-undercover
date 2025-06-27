@@ -4,6 +4,13 @@ authors = ["只有午安"]
 version = "0.1.0"
 edition = "2024"
 
+# 添加静态链接配置
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
 [[bin]]
 name = "fishpi-undercover"
 path = "src/main.rs"
@@ -34,3 +41,5 @@ once_cell = "1.19"
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
 url = "2.4"
 clap = { version = "3.0", features = ["derive"] }
+tower-http = { version = "0.5", features = ["cors"] }
+urlencoding = "2.1"

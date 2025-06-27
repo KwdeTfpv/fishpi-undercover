@@ -8,3 +8,6 @@ config.toml
 .DS_Store
 Thumbs.db
 /data
+deploy.sh
+ADMIN.md
+admin.html

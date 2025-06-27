@@ -3,8 +3,181 @@
 <head>
     <meta charset="UTF-8">
     <title>测试</title>
+    <style>
+        /* 默认亮色模式样式 */
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #333333;
+            --border-color: #dee2e6;
+            --card-bg: #f8f9fa;
+            --button-bg: #007bff;
+            --button-text: #ffffff;
+            --input-bg: #ffffff;
+            --input-border: #ced4da;
+            --chat-bg: #ffffff;
+            --chat-border: #ccc;
+            --highlight-bg: #f0f0f0;
+            --host-bg: #ffc107;
+            --host-text: #000000;
+            --kick-button-bg: #dc3545;
+            --kick-button-text: #ffffff;
+        }
+
+        /* 暗黑模式样式 */
+        [data-theme="dark"] {
+            --bg-color: #1a1a1a;
+            --text-color: #e0e0e0;
+            --border-color: #404040;
+            --card-bg: #2d2d2d;
+            --button-bg: #007bff;
+            --button-text: #ffffff;
+            --input-bg: #333333;
+            --input-border: #555555;
+            --chat-bg: #2d2d2d;
+            --chat-border: #555555;
+            --highlight-bg: #404040;
+            --host-bg: #ffc107;
+            --host-text: #000000;
+            --kick-button-bg: #dc3545;
+            --kick-button-text: #ffffff;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* 暗黑模式切换按钮 */
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--button-bg);
+            color: var(--button-text);
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            z-index: 1000;
+            transition: background-color 0.3s;
+        }
+
+        .theme-toggle:hover {
+            opacity: 0.8;
+        }
+
+        /* 通用样式 */
+        h2, h3 {
+            color: var(--text-color);
+        }
+
+        input[type="text"], textarea {
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            border: 1px solid var(--input-border);
+            padding: 8px;
+            border-radius: 4px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus, textarea:focus {
+            outline: none;
+            border-color: var(--button-bg);
+        }
+
+        button {
+            background-color: var(--button-bg);
+            color: var(--button-text);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+
+        button:hover {
+            opacity: 0.8;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* 聊天区域样式 */
+        #chatMessages {
+            background-color: var(--chat-bg);
+            border: 1px solid var(--chat-border);
+        }
+
+        /* 卡片样式 */
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+
+        /* 高亮区域样式 */
+        .highlight {
+            background-color: var(--highlight-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        /* 玩家列表样式 */
+        #players p {
+            padding: 5px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        /* 描述列表样式 */
+        #descriptions p {
+            padding: 5px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        /* 投票选项样式 */
+        #voteOptions button {
+            margin: 5px;
+            display: block;
+            width: 100%;
+            text-align: left;
+        }
+
+        /* 滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--card-bg);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-color);
+        }
+    </style>
 </head>
 <body>
+    <!-- 暗黑模式切换按钮 -->
+    <button class="theme-toggle" onclick="toggleTheme()" id="themeToggle">
+        🌙 暗黑模式
+    </button>
+
     <div id="login">
         <h2>测试1</h2>
         <div id="loginStatus">
@@ -13,8 +186,17 @@
         </div>
         <div id="userInfo" style="display: none;">
             <p>欢迎，<span id="userNickname"></span>！</p>
-            <input type="text" id="roomId" placeholder="房间ID（可选）">
-            <button onclick="joinGame()">加入游戏</button>
+            <div style="margin: 10px 0;">
+                <input type="text" id="customRoomId" placeholder="自定义房间ID（可选）" style="margin-right: 5px;">
+                <button onclick="createRoom()">创建房间</button>
+                <div style="font-size: 12px; color: var(--text-color); opacity: 0.7; margin-top: 5px;">
+                    房间ID格式：1-20个字符，只能包含字母、数字、下划线和连字符
+                </div>
+            </div>
+            <div style="margin: 10px 0;">
+                <input type="text" id="roomId" placeholder="房间ID（可选）">
+                <button onclick="joinGame()">加入游戏</button>
+            </div>
             <button onclick="logout()">退出登录</button>
         </div>
         <div id="roomList" style="margin-top: 20px;"></div>
@@ -43,9 +225,14 @@
         let countdownStartTime = null;
         let userSessionId = null;
         let userInfo = null;
+        let lastGameResult = null; // 保存上一局游戏结果
+        let isRefreshingRoomList = false; // 防止重复刷新房间列表的标志
 
         // 页面加载时检查登录状态
         window.onload = function() {
+            // 初始化暗黑模式
+            initTheme();
+            
             // 检查URL参数中是否有session_id（登录回调）
             const urlParams = new URLSearchParams(window.location.search);
             const sessionId = urlParams.get('session_id');
@@ -71,6 +258,33 @@
             });
         };
 
+        // 暗黑模式相关函数
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme) {
+                document.documentElement.setAttribute('data-theme', savedTheme);
+                updateThemeButton(savedTheme);
+            }
+        }
+
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeButton(newTheme);
+        }
+
+        function updateThemeButton(theme) {
+            const button = document.getElementById('themeToggle');
+            if (theme === 'dark') {
+                button.innerHTML = '☀️ 亮色模式';
+            } else {
+                button.innerHTML = '🌙 暗黑模式';
+            }
+        }
+
         // 检查登录状态
         function checkLoginStatus() {
             const sessionId = localStorage.getItem('fishpi_session_id');
@@ -92,9 +306,53 @@
         // 显示用户信息
         function showUserInfo(user) {
             userInfo = user;
-            document.getElementById('userNickname').textContent = user.nickname;
+            // 使用nickname字段，如果没有则使用username
+            const displayName = user.nickname || user.username;
+            document.getElementById('userNickname').textContent = displayName;
             document.getElementById('loginStatus').style.display = 'none';
             document.getElementById('userInfo').style.display = 'block';
+            
+            // 用户登录成功后，主动获取房间列表
+            fetchRoomList();
+        }
+
+        // 获取房间列表
+        function fetchRoomList() {
+            if (!userSessionId) {
+                console.log('未登录，无法获取房间列表');
+                return;
+            }
+            
+            // 防止重复刷新
+            if (isRefreshingRoomList) {
+                console.log('房间列表正在刷新中，跳过重复请求');
+                return;
+            }
+            
+            isRefreshingRoomList = true;
+            console.log('获取房间列表...');
+            fetch(`/rooms/status?session_id=${userSessionId}`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('房间列表API响应:', data);
+                    if (data.success && data.rooms) {
+                        updateRoomList(data.rooms);
+                    } else {
+                        console.error('获取房间列表失败:', data.message || '未知错误');
+                    }
+                })
+                .catch(error => {
+                    console.error('获取房间列表失败:', error);
+                    // 如果API获取失败，显示错误信息
+                    const roomList = document.getElementById('roomList');
+                    roomList.innerHTML = '<p>获取房间列表失败，请刷新页面重试</p>';
+                })
+                .finally(() => {
+                    // 延迟重置标志，防止短时间内重复调用
+                    setTimeout(() => {
+                        isRefreshingRoomList = false;
+                    }, 1000);
+                });
         }
 
         // 登录摸鱼派
@@ -161,6 +419,13 @@
             showLoginPrompt();
         }
 
+        function generateWebSocketUrl(endpoint = '/ws') {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host;
+            return `${protocol}//${host}${endpoint}`;
+            //return `ws://127.0.0.1:8990/ws`;
+        }
+
         function joinGame() {
             if (!userSessionId) {
                 alert('请先登录');
@@ -168,8 +433,15 @@
             }
 
             const roomId = document.getElementById('roomId').value;
-            // 修复WebSocket URL构建逻辑
-            let wsUrl = `ws://${window.location.host}/ws`;
+            
+            connectToWebSocket(null, roomId);
+        }
+        
+
+        function connectToWebSocket(wsConfig, roomId) {
+            // 使用新函数生成WebSocket地址
+            let wsUrl = generateWebSocketUrl('/ws');
+            
             const params = new URLSearchParams();
             if (roomId) {
                 params.append('room_id', roomId);
@@ -183,42 +455,37 @@
             console.log('尝试连接WebSocket:', wsUrl);
             
             try {
+                // 强制使用WS协议，忽略混合内容警告
                 ws = new WebSocket(wsUrl);
 
                 ws.onopen = () => {
                     console.log('WebSocket连接已建立');
-                    // 发送join消息加入房间
-                    ws.send(JSON.stringify({
-                        type: 'join',
-                        data: {
-                            player_name: userInfo.nickname,
-                            player_id: userInfo.user_id
-                        }
-                    }));
+                    console.log('连接状态:', ws.readyState);
+                    console.log('等待服务器发送user_info消息...');
+                    // 连接建立后，等待服务器发送user_info消息
+                    // join消息将在收到user_info后发送
                 };
 
                 ws.onmessage = (event) => {
-                    console.log('收到消息:', event.data);
                     try {
                         const message = JSON.parse(event.data);
                         handleMessage(message);
                     } catch (error) {
                         console.error('解析消息失败:', error);
+                        console.error('原始消息内容:', event.data);
                     }
                 };
 
                 ws.onclose = (event) => {
                     console.log('WebSocket连接已关闭', event.code, event.reason);
-                    if (event.code !== 1000) { // 1000是正常关闭
-                        alert(`连接已断开 (代码: ${event.code})`);
-                    }
+                    console.log('关闭原因:', event.reason || '未知');
                     resetGame();
                 };
 
                 ws.onerror = (error) => {
                     console.error('WebSocket错误:', error);
-                    alert('连接发生错误，请检查网络连接或联系管理员');
-                    resetGame();
+                    console.error('错误详情:', error);
+                    // 不立即显示错误，让onclose处理
                 };
             } catch (error) {
                 console.error('创建WebSocket连接失败:', error);
@@ -227,10 +494,7 @@
         }
 
         function handleMessage(message) {
-            console.log('处理消息:', message);
             try {
-                console.log('消息类型:', message.type);
-                console.log('消息数据:', message.data);
                 
                 switch (message.type) {
                     case 'user_info':
@@ -238,10 +502,37 @@
                         userInfo = message.data;
                         playerId = message.data.user_id;
                         console.log('设置玩家ID为:', playerId);
+                        
+                        // 收到用户信息后，如果有房间ID，发送join消息加入房间
+                        const roomId = document.getElementById('roomId').value;
+                        if (roomId && ws && ws.readyState === WebSocket.OPEN) {
+                            const playerName = userInfo.nickname || userInfo.username;
+                            console.log('发送join消息:', { player_name: playerName, player_id: userInfo.user_id });
+                            ws.send(JSON.stringify({
+                                type: 'join',
+                                data: {
+                                    player_name: playerName,
+                                    player_id: userInfo.user_id
+                                }
+                            }));
+                        }
                         break;
                     case 'notification':
                         console.log('处理通知消息');
                         showNotification(message.data.message);
+                        
+                        // 处理描述列表
+                        if (message.data.descriptions) {
+                            console.log('收到描述列表:', message.data.descriptions);
+                            showDescriptions(message.data.descriptions);
+                        }
+                        break;
+                    case 'descriptions_update':
+                        console.log('处理描述列表更新消息');
+                        if (message.data.descriptions) {
+                            console.log('收到描述列表更新:', message.data.descriptions);
+                            showDescriptions(message.data.descriptions);
+                        }
                         break;
                     case 'state_update':
                         console.log('处理状态更新消息');
@@ -257,14 +548,10 @@
                         }
                         updateGameState(message.data);
                         break;
-                    case 'room_list':
-                        console.log('处理房间列表消息');
-                        console.log('房间列表数据:', message.data.rooms);
-                        updateRoomList(message.data.rooms);
-                        break;
                     case 'error':
                         console.log('处理错误消息');
-                        showError(message.data.message);
+                        const errorMessage = message.data.message || message.data.code || '未知错误';
+                        showError(errorMessage);
                         break;
                     case 'description':
                         console.log('处理描述消息');
@@ -277,6 +564,31 @@
                     case 'chat':
                         console.log('处理聊天消息');
                         showChatMessage(message.data);
+                        break;
+                    case 'eliminated_chat':
+                        console.log('处理被淘汰玩家聊天消息');
+                        showEliminatedChatMessage(message.data);
+                        break;
+                    case 'countdown':
+                        handleCountdownUpdate(message.data.seconds);
+                        break;
+                    case 'kicked':
+                        console.log('处理被踢出消息');
+                        showNotification(message.data.message);
+                        // 被踢出房间，返回大厅
+                        setTimeout(() => {
+                            alert('您已被踢出房间');
+                            leaveGame();
+                        }, 1000);
+                        break;
+                    case 'kicked_from_other_room':
+                        console.log('处理从其他房间踢出消息');
+                        showNotification(message.data.message);
+                        // 被从其他房间踢出，关闭连接并返回大厅
+                        setTimeout(() => {
+                            alert('您已加入其他房间，已从当前房间断开连接');
+                            leaveGame();
+                        }, 1000);
                         break;
                     default:
                         console.log('未知消息类型:', message.type);
@@ -323,6 +635,24 @@
             console.log('更新房间信息');
             roomInfo.innerHTML = `<p>当前状态：${getStateName(data.state)}</p>`;
             
+            // 如果在大厅状态，更新准备按钮状态
+            if (currentState === 'Lobby') {
+                const readyButton = document.querySelector('#gameContent button');
+                if (readyButton && readyButton.textContent === '准备' || readyButton && readyButton.textContent === '已准备') {
+                    // 检查当前玩家是否已经准备
+                    const lobbyPlayer = data.players.find(p => p.id === playerId);
+                    const isReady = lobbyPlayer && lobbyPlayer.is_ready;
+                    
+                    if (isReady) {
+                        readyButton.textContent = '取消准备';
+                        readyButton.disabled = false;
+                    } else {
+                        readyButton.textContent = '准备';
+                        readyButton.disabled = false;
+                    }
+                }
+            }
+            
             console.log('根据状态更新游戏内容');
             updateGameContent(data);
         }
@@ -331,9 +661,31 @@
             console.log('更新游戏内容');
             console.log('游戏数据:', data);
             const gameContent = document.getElementById('gameContent');
+            const voteSection = document.getElementById('voteSection');
+
+            // 强制清空内容，防止UI叠加
+            gameContent.innerHTML = '';
+            voteSection.innerHTML = '';
+            voteSection.style.display = 'none';
             
-            // 清除之前的倒计时
-            clearCountdown();
+            // 只在游戏真正开始时（进入DescribePhase状态）才清除上一局结果
+            if (data.state === 'DescribePhase') {
+                console.log('游戏真正开始，清除上一局结果');
+                lastGameResult = null;
+            }
+            
+            // 不再手动清除倒计时，让后端控制倒计时的显示和隐藏
+            
+            // 显示当前玩家的词语信息（在所有游戏状态中都显示）
+            const myPlayer = data.players.find(p => p.id === playerId);
+            let playerWordHtml = '';
+            if (myPlayer && myPlayer.word && data.state !== 'Lobby') {
+                playerWordHtml = `
+                    <div style="background-color: var(--highlight-bg); padding: 10px; margin-bottom: 10px; border-radius: 5px; border: 1px solid var(--border-color);">
+                        <p><strong>你的词语：</strong>${myPlayer.word}</p>
+                    </div>
+                `;
+            }
             
             switch (data.state) {
                 case 'Lobby':
@@ -346,9 +698,35 @@
                     const isReady = lobbyPlayer && lobbyPlayer.is_ready;
                     
                     if (isReady) {
-                        gameContent.innerHTML = '<button disabled>已准备</button>';
+                        gameContent.innerHTML = '<button onclick="ready()">取消准备</button>';
                     } else {
                         gameContent.innerHTML = '<button onclick="ready()">准备</button>';
+                    }
+                    
+                    // 如果有上一局游戏结果，显示上一局信息
+                    if (lastGameResult) {
+                        const lastGameDiv = document.createElement('div');
+                        lastGameDiv.style.cssText = 'background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 5px; padding: 15px; margin: 15px 0;';
+                        const winnerText = lastGameResult.winner === 'Civilian' ? '平民' : lastGameResult.winner === 'Undercover' ? '卧底' : lastGameResult.winner;
+                        lastGameDiv.innerHTML = `
+                            <h3 style="margin-top: 0; color: var(--text-color);">上一局游戏结果</h3>
+                            <p><strong>获胜方：</strong>${winnerText}</p>
+                            <p><strong>所有玩家角色和词语：</strong></p>
+                            <div style="max-height: 200px; overflow-y: auto;">
+                        `;
+                        
+                        lastGameResult.players.forEach(player => {
+                            const role = player.role || '未知';
+                            const word = player.word || '未知';
+                            const status = player.is_alive ? '存活' : '已淘汰';
+                            const statusColor = player.is_alive ? 'green' : 'red';
+                            lastGameDiv.innerHTML += `
+                                <p style="margin: 5px 0; color: ${statusColor};">${player.name}: ${role} - 词语: ${word} (${status})</p>
+                            `;
+                        });
+                        
+                        lastGameDiv.innerHTML += '</div>';
+                        gameContent.appendChild(lastGameDiv);
                     }
                     
                     // 添加聊天区域
@@ -356,7 +734,7 @@
                     lobbyChatDiv.id = 'chatSection';
                     lobbyChatDiv.innerHTML = `
                         <h3>聊天区域</h3>
-                        <div id="chatMessages" style="height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin: 10px 0;"></div>
+                        <div id="chatMessages" style="height: 200px; overflow-y: auto; border: 1px solid var(--chat-border); padding: 10px; margin: 10px 0;"></div>
                         <div style="display: flex; gap: 10px;">
                             <input type="text" id="chatInput" placeholder="输入聊天内容..." style="flex: 1;">
                             <button onclick="sendChat()">发送</button>
@@ -368,12 +746,18 @@
                     if (data.chat_messages) {
                         showChatMessages(data.chat_messages);
                     }
+                    
+                    // 为被淘汰的玩家添加被淘汰聊天区
+                    addEliminatedChatSection(gameContent, data);
                     break;
                 case 'RoleAssignment':
                     console.log('角色分配状态');
                     // 隐藏投票区域
                     document.getElementById('voteSection').style.display = 'none';
-                    gameContent.innerHTML = '<p>正在分配角色...</p>';
+                    gameContent.innerHTML = `
+                        ${playerWordHtml}
+                        <p>正在分配角色...</p>
+                    `;
                     break;
                 case 'DescribePhase':
                     console.log('描述阶段');
@@ -384,31 +768,62 @@
                         console.log('当前玩家回合');
                         const player = data.players.find(p => p.id === playerId);
                         gameContent.innerHTML = `
+                            ${playerWordHtml}
                             <div id="countdown">
-                                <h3>描述时间剩余：<span id="countdown-display">60</span>秒</h3>
+                                <h3>描述时间剩余：<span id="countdown-display">--</span>秒</h3>
                             </div>
                             <p>你的词语是：${player.word}</p>
                             <textarea id="description" placeholder="请输入你的描述"></textarea>
                             <button onclick="submitDescription()">提交描述</button>
                         `;
-                        // 开始60秒倒计时
-                        startCountdown(60, 'describe');
+                        // 倒计时由后端控制
+                        startCountdown();
                     } else {
                         console.log('等待其他玩家');
                         const currentPlayerName = data.players.find(p => p.id === currentPlayer)?.name || '未知玩家';
                         gameContent.innerHTML = `
+                            ${playerWordHtml}
                             <div id="countdown">
-                                <h3>等待描述时间剩余：<span id="countdown-display">60</span>秒</h3>
+                                <h3>等待描述时间剩余：<span id="countdown-display">--</span>秒</h3>
                             </div>
                             <p>等待玩家 ${currentPlayerName} 描述...</p>
                         `;
-                        // 开始60秒倒计时
-                        startCountdown(60, 'describe');
+                        // 倒计时由后端控制
+                        startCountdown();
                     }
                     showDescriptions(data.descriptions || []);
+                    
+                    // 添加聊天区域
+                    const describeChatDiv = document.createElement('div');
+                    describeChatDiv.id = 'chatSection';
+                    describeChatDiv.innerHTML = `
+                        <h3 style="margin-top: 20px;">聊天区域</h3>
+                        <div id="chatMessages" style="height: 150px; overflow-y: auto; border: 1px solid var(--chat-border); padding: 10px; margin-bottom: 10px;"></div>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="chatInput" placeholder="输入聊天内容..." style="flex: 1;">
+                            <button onclick="sendChat()">发送</button>
+                        </div>
+                    `;
+                    gameContent.appendChild(describeChatDiv);
+                    
+                    // 显示历史聊天消息
+                    if (data.chat_messages) {
+                        showChatMessages(data.chat_messages);
+                    }
+                    
+                    // 为被淘汰的玩家添加被淘汰聊天区
+                    addEliminatedChatSection(gameContent, data);
                     break;
                 case 'VotePhase':
                     console.log('投票阶段');
+                    // 确保voteSection有正确的结构
+                    voteSection.innerHTML = `
+                        <h3>投票</h3>
+                        <div id="voteOptions"></div>
+                    `;
+                    
+                    gameContent.innerHTML = playerWordHtml;
+                    
                     showVoteSection(data.players);
                     showDescriptions(data.descriptions || []);
                     
@@ -421,31 +836,33 @@
                     }
                     
                     // 在投票区域添加倒计时
-                    const voteSection = document.getElementById('voteSection');
-                    const countdownDiv = document.createElement('div');
-                    countdownDiv.id = 'countdown';
-                    countdownDiv.innerHTML = '<h3>投票时间剩余：<span id="countdown-display">60</span>秒</h3>';
-                    voteSection.insertBefore(countdownDiv, voteSection.firstChild);
-                    // 开始60秒倒计时
-                    startCountdown(60, 'vote');
+                    const voteCountdownDiv = document.createElement('div');
+                    voteCountdownDiv.id = 'countdown';
+                    voteCountdownDiv.innerHTML = '<h3>投票时间剩余：<span id="countdown-display">--</span>秒</h3>';
+                    voteSection.insertBefore(voteCountdownDiv, voteSection.firstChild);
+                    // 倒计时由后端控制
+                    startCountdown();
                     
                     // 添加聊天区域
                     const voteChatDiv = document.createElement('div');
                     voteChatDiv.id = 'chatSection';
                     voteChatDiv.innerHTML = `
-                        <h3>聊天区域</h3>
-                        <div id="chatMessages" style="height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin: 10px 0;"></div>
+                        <h3 style="margin-top: 20px;">聊天区域</h3>
+                        <div id="chatMessages" style="height: 150px; overflow-y: auto; border: 1px solid var(--chat-border); padding: 10px; margin-bottom: 10px;"></div>
                         <div style="display: flex; gap: 10px;">
                             <input type="text" id="chatInput" placeholder="输入聊天内容..." style="flex: 1;">
                             <button onclick="sendChat()">发送</button>
                         </div>
                     `;
-                    voteSection.appendChild(voteChatDiv);
+                    gameContent.appendChild(voteChatDiv);
                     
                     // 显示历史聊天消息
                     if (data.chat_messages) {
                         showChatMessages(data.chat_messages);
                     }
+                    
+                    // 为被淘汰的玩家添加被淘汰聊天区
+                    addEliminatedChatSection(gameContent, data);
                     break;
                 case 'ResultPhase':
                     console.log('结果阶段');
@@ -470,31 +887,71 @@
                     
                     gameContent.innerHTML = `
                         <div id="countdown">
-                            <h3>下一轮倒计时：<span id="countdown-display">5</span>秒</h3>
+                            <h3>下一轮倒计时：<span id="countdown-display">--</span>秒</h3>
                         </div>
+                        ${playerWordHtml}
                         <h3>投票结果</h3>
                         <p>${resultMessage}</p>
                         <p>正在进入下一轮...</p>
                     `;
-                    // 开始5秒倒计时
-                    startCountdown(5, 'result');
+                    // 倒计时由后端控制
+                    startCountdown();
+                    
+                    // 为被淘汰的玩家添加被淘汰聊天区
+                    addEliminatedChatSection(gameContent, data);
                     break;
                 case 'GameOver':
                     console.log('游戏结束');
                     // 隐藏投票区域
                     document.getElementById('voteSection').style.display = 'none';
                     
+                    const gameOverContent = document.getElementById('gameContent');
+                    gameOverContent.innerHTML = ''; // 清空内容
+
                     const winner = data.winner || '未知';
                     const winnerText = winner === 'Civilian' ? '平民' : winner === 'Undercover' ? '卧底' : winner;
                     
-                    gameContent.innerHTML = `
+                    // 保存上一局游戏结果
+                    lastGameResult = {
+                        winner: winner,
+                        players: data.players
+                    };
+                    
+                    gameOverContent.innerHTML += `
                         <h2>游戏结束！</h2>
                         <h3>获胜方：${winnerText}</h3>
+                        ${playerWordHtml}
                         <p>所有玩家角色和词语：</p>
                         <div id="finalResults"></div>
-                        <button onclick="ready()">再来一局</button>
                     `;
                     showFinalResults(data.players);
+
+                    // 添加"再来一局"按钮
+                    const playAgainButton = document.createElement('button');
+                    playAgainButton.textContent = '再来一局';
+                    playAgainButton.onclick = ready;
+                    gameOverContent.appendChild(playAgainButton);
+                    
+                    // 添加聊天区域
+                    const gameOverChatDiv = document.createElement('div');
+                    gameOverChatDiv.id = 'chatSection';
+                    gameOverChatDiv.innerHTML = `
+                        <h3 style="margin-top: 20px;">聊天区域</h3>
+                        <div id="chatMessages" style="height: 150px; overflow-y: auto; border: 1px solid var(--chat-border); padding: 10px; margin-bottom: 10px;"></div>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="chatInput" placeholder="输入聊天内容..." style="flex: 1;">
+                            <button onclick="sendChat()">发送</button>
+                        </div>
+                    `;
+                    gameOverContent.appendChild(gameOverChatDiv);
+                    
+                    // 显示历史聊天消息
+                    if (data.chat_messages) {
+                        showChatMessages(data.chat_messages);
+                    }
+                    
+                    // 为被淘汰的玩家添加被淘汰聊天区
+                    addEliminatedChatSection(gameOverContent, data);
                     break;
             }
         }
@@ -504,14 +961,49 @@
             console.log('玩家数据:', players);
             const playersDiv = document.getElementById('players');
             playersDiv.innerHTML = '<h3>玩家列表</h3>';
+            
+            // 获取房主ID
+            const hostId = gameData.host;
+            console.log('房主ID:', hostId);
+            
             players.forEach(player => {
                 console.log('处理玩家:', player);
-                const status = player.is_alive ? '存活' : '已淘汰';
-                const statusClass = player.is_alive ? '' : 'style="color: red;"';
-                // 只显示当前玩家的角色
-                const role = (player.id === playerId && player.role) ? `(${player.role})` : '';
+                
+                let status;
+                let statusClass = '';
+
+                if (currentState === 'Lobby') {
+                    status = player.is_ready ? '准备' : '未准备';
+                    statusClass = player.is_ready ? 'style="color: green;"' : 'style="color: gray;"';
+                } else {
+                    status = player.is_alive ? '存活' : '已淘汰';
+                    statusClass = player.is_alive ? '' : 'style="color: red;"';
+                }
+
+                // 显示当前玩家的角色和词语
+                let playerInfo = '';
+                if (player.id === playerId) {
+                    if (player.role && player.word) {
+                        playerInfo = ` (${player.role} - 词语: ${player.word})`;
+                    } else if (player.role) {
+                        playerInfo = ` (${player.role})`;
+                    }
+                }
+                
+                // 房主标识
+                let hostBadge = '';
+                if (player.id === hostId) {
+                    hostBadge = ' <span style="background-color: var(--host-bg); color: var(--host-text); padding: 2px 6px; border-radius: 3px; font-size: 12px; margin-left: 5px;">房主</span>';
+                }
+                
+                // 踢人按钮（只有房主可以看到，且不能踢自己）
+                let kickButton = '';
+                if (currentState === 'Lobby' && playerId === hostId && player.id !== playerId) {
+                    kickButton = ` <button onclick="kickPlayer('${player.id}', '${player.name}')" style="background-color: var(--kick-button-bg); color: var(--kick-button-text); border: none; padding: 2px 6px; border-radius: 3px; font-size: 12px; cursor: pointer; margin-left: 5px;">踢出</button>`;
+                }
+                
                 playersDiv.innerHTML += `
-                    <p ${statusClass}>${player.name} ${role} - ${status}</p>
+                    <p ${statusClass}>${player.name}${hostBadge}${playerInfo} - ${status}${kickButton}</p>
                 `;
             });
         }
@@ -552,19 +1044,17 @@
         }
 
         function showVoteSection(players) {
-            // 清除之前的倒计时
-            clearCountdown();
+            // 不再手动清除倒计时，让后端控制倒计时的显示和隐藏
             
             const voteSection = document.getElementById('voteSection');
-            const voteOptions = document.getElementById('voteOptions');
             voteSection.style.display = 'block';
             
-            // 只在投票阶段清除之前的聊天区域
-            if (currentState === 'VotePhase') {
-                const existingChatSection = document.getElementById('chatSection');
-                if (existingChatSection) {
-                    existingChatSection.remove();
-                }
+            // 确保voteOptions元素存在
+            let voteOptions = document.getElementById('voteOptions');
+            if (!voteOptions) {
+                voteOptions = document.createElement('div');
+                voteOptions.id = 'voteOptions';
+                voteSection.appendChild(voteOptions);
             }
             
             voteOptions.innerHTML = '';
@@ -716,6 +1206,13 @@
             playerId = null;
             currentState = null;
             gameData = null;
+            // 不清除上一局结果信息，让玩家重新加入房间时还能看到
+            
+            // 用户离开房间后，刷新房间列表
+            if (userSessionId) {
+                console.log('用户离开房间，刷新房间列表');
+                fetchRoomList();
+            }
         }
 
         function showError(message) {
@@ -731,16 +1228,45 @@
             }
 
             let html = '<h3>可用房间列表</h3><ul>';
-            rooms.forEach(room => {
-                html += `
-                    <li>
-                        房间ID: ${room.id} - 玩家数: ${room.player_count}
-                        <button onclick="joinRoom('${room.id}')">加入此房间</button>
-                    </li>
-                `;
+            let validRooms = 0;
+            
+            rooms.forEach((room, index) => {
+                console.log(`房间 ${index}:`, room);
+                
+                // 检查房间数据是否有效
+                const roomId = room.room_id || room.id;
+                const playerCount = room.player_count;
+                const shouldBeDeleted = room.should_be_deleted;
+                
+                console.log(`房间 ${index} 详情:`, {
+                    roomId,
+                    playerCount,
+                    shouldBeDeleted,
+                    hasRoomId: !!roomId,
+                    hasPlayerCount: typeof playerCount !== 'undefined'
+                });
+                
+                // 检查房间是否应该被删除
+                if (!shouldBeDeleted && roomId) {
+                    validRooms++;
+                    html += `
+                        <li>
+                            房间ID: ${roomId} - 玩家数: ${playerCount || 0}
+                            <button onclick="joinRoom('${roomId}')">加入此房间</button>
+                        </li>
+                    `;
+                }
             });
+            
             html += '</ul>';
-            roomList.innerHTML = html;
+            
+            if (validRooms === 0) {
+                roomList.innerHTML = '<p>当前没有可用的房间</p>';
+            } else {
+                roomList.innerHTML = html;
+            }
+            
+            console.log(`房间列表更新完成，有效房间数: ${validRooms}`);
         }
 
         function joinRoom(roomId) {
@@ -783,10 +1309,30 @@
             }
         }
 
-        // 开始倒计时
-        function startCountdown(duration, phase) {
-            clearCountdown();
-            countdownStartTime = Date.now();
+        function handleCountdownUpdate(seconds) {
+            const countdownDisplay = document.getElementById('countdown-display');
+            if (countdownDisplay) {
+                countdownDisplay.textContent = seconds;
+                
+                // 如果倒计时结束，自动清除显示
+                if (seconds <= 0) {
+                    // 隐藏倒计时元素
+                    const countdownDiv = document.getElementById('countdown');
+                    if (countdownDiv) {
+                        countdownDiv.style.display = 'none';
+                    }
+                } else {
+                    // 确保倒计时元素可见
+                    const countdownDiv = document.getElementById('countdown');
+                    if (countdownDiv) {
+                        countdownDiv.style.display = 'block';
+                    }
+                }
+            }
+        }
+
+        // 开始倒计时（现在主要用于初始化显示，实际倒计时由后端控制）
+        function startCountdown() {
             const countdownDisplay = document.getElementById('countdown-display');
             
             if (!countdownDisplay) {
@@ -794,29 +1340,41 @@
                 return;
             }
             
-            let remaining = duration;
-            countdownDisplay.textContent = remaining;
+            // 设置初始显示值为占位符
+            countdownDisplay.textContent = '--';
             
-            countdownTimer = setInterval(() => {
-                remaining--;
-                if (countdownDisplay) {
-                    countdownDisplay.textContent = remaining;
-                }
-                
-                if (remaining <= 0) {
-                    clearCountdown();
-                    console.log(`${phase}阶段倒计时结束`);
-                }
-            }, 1000);
+            // 确保倒计时元素可见
+            const countdownDiv = document.getElementById('countdown');
+            if (countdownDiv) {
+                countdownDiv.style.display = 'block';
+            }
+            
+            console.log('倒计时初始化，等待后端更新');
+            
+            // 不再使用前端定时器，改为依赖后端发送的倒计时更新
+            // 保留countdownTimer变量以防需要手动清除
+            countdownTimer = null;
         }
 
-        // 清除倒计时
+        // 清除倒计时（主要用于游戏重置等场景）
         function clearCountdown() {
             if (countdownTimer) {
                 clearInterval(countdownTimer);
                 countdownTimer = null;
             }
             countdownStartTime = null;
+            
+            // 隐藏倒计时元素
+            const countdownDiv = document.getElementById('countdown');
+            if (countdownDiv) {
+                countdownDiv.style.display = 'none';
+            }
+            
+            // 清除倒计时显示
+            const countdownDisplay = document.getElementById('countdown-display');
+            if (countdownDisplay) {
+                countdownDisplay.textContent = '0';
+            }
         }
 
         // 发送聊天消息
@@ -844,6 +1402,31 @@
             chatInput.value = '';
         }
 
+        // 发送被淘汰玩家聊天消息
+        function sendEliminatedChat() {
+            if (!ws || !playerId) {
+                console.error('WebSocket未连接或玩家ID未设置');
+                return;
+            }
+            const eliminatedChatInput = document.getElementById('eliminatedChatInput');
+            const content = eliminatedChatInput.value.trim();
+            
+            if (!content) {
+                return;
+            }
+            
+            console.log('发送被淘汰聊天消息，玩家ID:', playerId, '内容:', content);
+            ws.send(JSON.stringify({
+                type: 'eliminated_chat',
+                data: {
+                    player_id: playerId,
+                    content: content
+                }
+            }));
+            
+            eliminatedChatInput.value = '';
+        }
+
         // 显示聊天消息
         function showChatMessage(data) {
             const chatMessages = document.getElementById('chatMessages');
@@ -856,6 +1439,19 @@
             
             // 自动滚动到底部
             chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function showEliminatedChatMessage(data) {
+            const eliminatedChatMessages = document.getElementById('eliminatedChatMessages');
+            if (!eliminatedChatMessages) return;
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.style.marginBottom = '5px';
+            messageDiv.innerHTML = `<strong>${data.player_name}:</strong> ${data.content}`;
+            eliminatedChatMessages.appendChild(messageDiv);
+            
+            // 自动滚动到底部
+            eliminatedChatMessages.scrollTop = eliminatedChatMessages.scrollHeight;
         }
 
         // 显示聊天消息列表
@@ -873,6 +1469,132 @@
             
             // 自动滚动到底部
             chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // 显示被淘汰玩家聊天消息列表
+        function showEliminatedChatMessages(messages) {
+            const eliminatedChatMessages = document.getElementById('eliminatedChatMessages');
+            if (!eliminatedChatMessages) return;
+            
+            eliminatedChatMessages.innerHTML = '';
+            messages.forEach(msg => {
+                const messageDiv = document.createElement('div');
+                messageDiv.style.marginBottom = '5px';
+                messageDiv.innerHTML = `<strong>${msg.player_name}:</strong> ${msg.content}`;
+                eliminatedChatMessages.appendChild(messageDiv);
+            });
+            
+            // 自动滚动到底部
+            eliminatedChatMessages.scrollTop = eliminatedChatMessages.scrollHeight;
+        }
+
+        // 验证房间ID格式
+        function validateRoomId(roomId) {
+            if (!roomId) return { valid: true, message: '' };
+            
+            if (roomId.length > 20) {
+                return { valid: false, message: '房间ID长度不能超过20个字符' };
+            }
+            
+            if (!/^[a-zA-Z0-9_-]+$/.test(roomId)) {
+                return { valid: false, message: '房间ID只能包含字母、数字、下划线和连字符' };
+            }
+            
+            return { valid: true, message: '' };
+        }
+
+        // 创建房间
+        function createRoom() {
+            if (!userSessionId) {
+                alert('请先登录');
+                return;
+            }
+            
+            const customRoomId = document.getElementById('customRoomId').value.trim();
+            
+            // 前端验证房间ID格式
+            if (customRoomId) {
+                const validation = validateRoomId(customRoomId);
+                if (!validation.valid) {
+                    alert('房间ID格式错误: ' + validation.message);
+                    return;
+                }
+            }
+            
+            console.log('创建房间...', customRoomId ? `自定义ID: ${customRoomId}` : '自动生成ID');
+            
+            // 构建请求URL
+            let url = `/rooms/create?session_id=${userSessionId}`;
+            if (customRoomId) {
+                url += `&room_id=${encodeURIComponent(customRoomId)}`;
+            }
+            
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('创建房间API响应:', data);
+                    if (data.success && data.room_id) {
+                        console.log('房间创建成功:', data.room_id);
+                        // 自动填入房间ID并加入游戏
+                        document.getElementById('roomId').value = data.room_id;
+                        // 清空自定义房间ID输入框
+                        document.getElementById('customRoomId').value = '';
+                        joinGame();
+                    } else {
+                        console.error('创建房间失败:', data.message || '未知错误');
+                        alert('创建房间失败: ' + (data.message || '未知错误'));
+                    }
+                })
+                .catch(error => {
+                    console.error('创建房间请求失败:', error);
+                    alert('创建房间请求失败，请重试');
+                });
+        }
+
+        // 踢人函数
+        function kickPlayer(targetId, targetName) {
+            if (!ws || !playerId) {
+                console.error('WebSocket未连接或玩家ID未设置');
+                return;
+            }
+            
+            // 确认踢人操作
+            if (!confirm(`确定要踢出玩家 ${targetName} 吗？`)) {
+                return;
+            }
+            
+            console.log('发送踢人消息，踢人者ID:', playerId, '目标ID:', targetId);
+            ws.send(JSON.stringify({
+                type: 'kick',
+                data: {
+                    player_id: playerId,
+                    target_id: targetId
+                }
+            }));
+        }
+
+        function addEliminatedChatSection(gameContent, data) {
+            // 检查当前玩家是否已被淘汰
+            const currentPlayer = data.players.find(p => p.id === playerId);
+            if (currentPlayer && !currentPlayer.is_alive) {
+                const eliminatedChatDiv = document.createElement('div');
+                eliminatedChatDiv.id = 'eliminatedChatSection';
+                eliminatedChatDiv.innerHTML = `
+                    <h3 style="margin-top: 20px; color: #dc3545;">被淘汰玩家聊天区域</h3>
+                    <p style="color: #6c757d; font-size: 14px;">只有被淘汰的玩家可以在此聊天</p>
+                    <div id="eliminatedChatMessages" style="height: 150px; overflow-y: auto; border: 1px solid var(--chat-border); padding: 10px; margin-bottom: 10px;"></div>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="eliminatedChatInput" placeholder="输入聊天内容..." style="flex: 1;">
+                        <button onclick="sendEliminatedChat()">发送</button>
+                    </div>
+                `;
+                gameContent.appendChild(eliminatedChatDiv);
+                
+                // 显示历史被淘汰聊天消息
+                if (data.eliminated_chat_messages) {
+                    showEliminatedChatMessages(data.eliminated_chat_messages);
+                }
+            }
         }
     </script>
 </body>

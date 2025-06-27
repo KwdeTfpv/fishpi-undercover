@@ -12,10 +12,12 @@ pub struct Config {
     pub websocket: WebSocketConfig,
     pub game: GameConfig,
     pub redis: RedisConfig,
-    // pub log: LogConfig,
+    pub log: LogConfig,
     pub security: SecurityConfig,
     pub auth: AuthConfig,
+    pub cors: CorsConfig,
     pub word_bank: WordBankConfig,
+    pub admin: AdminConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -23,6 +25,8 @@ pub struct ServerConfig {
     pub host: String,
     pub port: u16,
     pub workers: usize,
+    pub http_port: Option<u16>, // HTTP服务器端口，如果为None则使用port
+    pub ws_port: Option<u16>,   // WebSocket服务器端口，如果为None则使用port
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,11 +51,11 @@ pub struct RedisConfig {
     pub pool_size: u32,
 }
 
-// #[derive(Debug, Deserialize)]
-// pub struct LogConfig {
-//     pub level: String,
-//     pub file: String,
-// }
+#[derive(Debug, Deserialize)]
+pub struct LogConfig {
+    pub level: String,
+    pub file: Option<String>,
+}
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct SecurityConfig {
@@ -79,6 +83,13 @@ pub struct WordFilterConfig {
 #[derive(Debug, Deserialize)]
 pub struct AuthConfig {
     pub domain: String,
+    pub ws_domain: Option<String>, // WebSocket域名，如果为None则使用domain
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CorsConfig {
+    pub allow_all_origins: Option<bool>,
+    pub allowed_origins: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -87,6 +98,12 @@ pub struct WordBankConfig {
     pub min_similarity: f32,
     pub max_words_per_category: usize,
     pub enable_categories: bool,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct AdminConfig {
+    /// 管理员用户名列表
+    pub admin_usernames: Vec<String>,
 }
 
 impl Config {
@@ -119,6 +136,20 @@ impl Config {
             .expect("Invalid server address")
     }
 
+    pub fn http_addr(&self) -> SocketAddr {
+        let port = self.server.http_port.unwrap_or(self.server.port);
+        format!("{}:{}", self.server.host, port)
+            .parse()
+            .expect("Invalid HTTP server address")
+    }
+
+    pub fn ws_addr(&self) -> SocketAddr {
+        let port = self.server.ws_port.unwrap_or(self.server.port);
+        format!("{}:{}", self.server.host, port)
+            .parse()
+            .expect("Invalid WebSocket server address")
+    }
+
     pub fn ping_interval(&self) -> Duration {
         Duration::from_secs(self.websocket.ping_interval)
     }
@@ -137,5 +168,14 @@ impl Config {
 
     pub fn round_delay(&self) -> Duration {
         Duration::from_secs(self.game.round_delay)
+    }
+
+    pub fn log_filter(&self) -> String {
+        format!("fishpi_undercover={}", self.log.level)
+    }
+
+    /// 检查用户是否为管理员
+    pub fn is_admin(&self, username: &str) -> bool {
+        self.admin.admin_usernames.contains(&username.to_string())
     }
 }

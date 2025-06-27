@@ -5,9 +5,27 @@
 # 服务器监听地址，0.0.0.0 表示监听所有网络接口
 host = "127.0.0.1"
 # 服务器端口号
-port = 8080
+port = 8989
 # 工作线程数量，建议设置为 CPU 核心数的 2-4 倍
 workers = 4
+# HTTP服务器端口（用于认证回调等），如果为None则使用port
+# 建议设置为HTTPS端口（如443）用于认证回调
+http_port = 8080
+# WebSocket服务器端口，如果为None则使用port
+# 建议设置为WS端口（如8081）用于WebSocket连接
+ws_port = 8900
+
+[log]
+# 日志级别，可选值：trace, debug, info, warn, error
+# trace: 最详细的日志，包含所有调试信息
+# debug: 调试级别，包含详细的程序运行信息
+# info: 信息级别，包含主要流程信息（推荐生产环境使用）
+# warn: 警告级别，只显示警告和错误
+# error: 错误级别，只显示错误信息
+level = "info"
+# 日志文件路径，如果不设置则输出到控制台
+# 取消注释并设置路径可将日志输出到文件
+# file = "logs/fishpi_undercover.log"
 
 [websocket]
 # WebSocket 连接路径
@@ -64,6 +82,30 @@ replacement = "***"
 # 认证域名，用于 CORS 和 cookie 设置
 # 请替换为您的实际域名
 domain = "https://your-domain.com"
+# WebSocket域名，如果为None则使用domain
+# 支持子域名：ws_domain = "ws.your-domain.com"
+# 支持完全不同的域名：ws_domain = "game.another-domain.com"
+ws_domain = "ws.your-domain.com"
+
+# CORS配置 - 控制允许的来源
+[cors]
+# 是否允许所有来源（开发环境建议设为true，生产环境建议设为false）
+allow_all_origins = true
+# 允许的源域名列表，当allow_all_origins为false时生效
+# 支持协议+域名+端口，例如：
+# - "http://localhost:3000"
+# - "https://your-frontend-domain.com"
+# - "http://127.0.0.1:8080"
+allowed_origins = [
+    "http://localhost:3000",     # React开发服务器
+    "http://localhost:8080",     # Vue开发服务器
+    "http://localhost:5173",     # Vite开发服务器
+    "http://127.0.0.1:3000",     # 本地IP访问
+    "http://127.0.0.1:8080",
+    "http://127.0.0.1:5173",
+    # 添加其他前端开发域名
+    # "https://your-frontend-domain.com"
+]
 
 [word_bank]
 # 词库文件路径
@@ -73,4 +115,12 @@ min_similarity = 0.5
 # 每个分类最大词语数量
 max_words_per_category = 10
 # 是否启用词语分类功能
-enable_categories = true 
+enable_categories = true
+
+# 管理员配置
+[admin]
+# 管理员用户名列表（摸鱼派用户名）
+admin_usernames = [
+    "admin",           # 示例管理员用户名
+    "your_username",   # 请替换为您的摸鱼派用户名
+] 
