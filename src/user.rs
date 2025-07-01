@@ -289,7 +289,9 @@ impl UserManager {
             let user = User {
                 id: user_id.to_string(),
                 username: fishpi_user.data.user_name.clone(),
-                nickname: fishpi_user.data.user_nickname.or(Some(fishpi_user.data.user_name)),
+                nickname: fishpi_user.data.user_nickname
+                    .filter(|nickname| !nickname.trim().is_empty())
+                    .or(Some(fishpi_user.data.user_name.clone())),
                 avatar: fishpi_user.data.user_avatar_url,
                 created_at: Utc::now(),
                 last_login: Utc::now(),
